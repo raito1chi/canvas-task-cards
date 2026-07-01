@@ -4,6 +4,6 @@
   "version": "1.0.0",
   "minAppVersion": "1.5.0",
   "description": "Add task cards with completion states to Obsidian Canvas",
-  "author": "",
+  "author": "raito1chi",
   "isDesktopOnly": false
 }

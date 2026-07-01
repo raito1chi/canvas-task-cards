@@ -92,7 +92,7 @@ Each task card has a small indicator on its left border containing a priority do
 
 ### Manual (BRAT)
 1. Install [BRAT](https://obsidian.md/plugins?id=obsidian42-brat)
-2. Add `https://github.com/your-username/canvas-task-cards`
+2. Add `https://github.com/raito1chi/canvas-task-cards`
 
 ### Manual (from source)
 1. Download `main.js`, `styles.css`, `manifest.json`
@@ -102,7 +102,7 @@ Each task card has a small indicator on its left border containing a priority do
 ## Development
 
 ```bash
-git clone https://github.com/your-username/canvas-task-cards
+git clone https://github.com/raito1chi/canvas-task-cards
 cd canvas-task-cards
 npm install
 npm run build     # production build
