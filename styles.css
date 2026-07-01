@@ -1,0 +1,293 @@
+:root {
+  --task-completed-color: #4caf50;
+  --task-completed-border-color: #4caf50;
+  --task-completed-opacity: 0.7;
+  --task-indicator-size: 18px;
+  --task-indicator-offset: -14px;
+  --task-indicator-z-index: 100;
+  --priority-high-color: #e53935;
+  --priority-medium-color: #fb8c00;
+  --priority-low-color: #43a047;
+  --type-task-color: #4caf50;
+  --type-question-color: #1e88e5;
+  --type-important-color: #e53935;
+  --type-idea-color: #fdd835;
+  --type-info-color: #00acc1;
+}
+
+/* ── Indicator container (replaces old checkbox) ── */
+.task-indicator {
+  position: absolute;
+  left: var(--task-indicator-offset);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  z-index: var(--task-indicator-z-index);
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
+  transition: none;
+}
+
+.task-card-animations .task-indicator {
+  transition: opacity 0.2s ease;
+}
+
+/* ── Priority dot ── */
+.task-priority-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: none;
+}
+
+.task-card-animations .task-priority-dot {
+  transition: background 0.2s ease;
+}
+
+.task-priority-dot[data-priority='none'] {
+  display: none;
+}
+
+.task-priority-dot[data-priority='high'] {
+  background: var(--priority-high-color);
+}
+
+.task-priority-dot[data-priority='medium'] {
+  background: var(--priority-medium-color);
+}
+
+.task-priority-dot[data-priority='low'] {
+  background: var(--priority-low-color);
+}
+
+/* ── Symbol ── */
+.task-symbol {
+  width: var(--task-indicator-size);
+  height: var(--task-indicator-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--task-indicator-size) * 0.82);
+  line-height: 1;
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: none;
+}
+
+.task-card-animations .task-symbol {
+  transition: color 0.2s ease, background 0.2s ease,
+    border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.task-symbol:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border-hover);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.task-symbol:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* ── Type-based symbol colors ── */
+.task-symbol[data-card-type='task'] {
+  color: var(--text-muted);
+}
+.task-symbol[data-card-type='task'].is-checked {
+  color: var(--type-task-color);
+  border-color: var(--type-task-color);
+  background: color-mix(in srgb, var(--type-task-color) 10%, var(--background-primary));
+}
+
+.task-symbol[data-card-type='question'] {
+  color: var(--type-question-color);
+  border-color: var(--type-question-color);
+  background: color-mix(in srgb, var(--type-question-color) 8%, var(--background-primary));
+}
+
+.task-symbol[data-card-type='important'] {
+  color: var(--type-important-color);
+  border-color: var(--type-important-color);
+  background: color-mix(in srgb, var(--type-important-color) 8%, var(--background-primary));
+}
+
+.task-symbol[data-card-type='idea'] {
+  color: var(--type-idea-color);
+  border-color: var(--type-idea-color);
+  background: color-mix(in srgb, var(--type-idea-color) 8%, var(--background-primary));
+}
+
+.task-symbol[data-card-type='info'] {
+  color: var(--type-info-color);
+  border-color: var(--type-info-color);
+  background: color-mix(in srgb, var(--type-info-color) 8%, var(--background-primary));
+}
+
+/* ── Completed card visual ── */
+.canvas-node.is-completed .canvas-node-container {
+  border-color: var(--task-completed-border-color) !important;
+  opacity: var(--task-completed-opacity);
+}
+
+.canvas-node.is-completed .canvas-node-content {
+  opacity: var(--task-completed-opacity);
+}
+
+.canvas-node.is-completed .canvas-node-label {
+  opacity: var(--task-completed-opacity);
+}
+
+/* ── Type-based border color for completed cards ── */
+.canvas-node.is-completed[data-card-type='question'] .canvas-node-container {
+  border-color: var(--type-question-color) !important;
+}
+.canvas-node.is-completed[data-card-type='important'] .canvas-node-container {
+  border-color: var(--type-important-color) !important;
+}
+.canvas-node.is-completed[data-card-type='idea'] .canvas-node-container {
+  border-color: var(--type-idea-color) !important;
+}
+.canvas-node.is-completed[data-card-type='info'] .canvas-node-container {
+  border-color: var(--type-info-color) !important;
+}
+
+/* ── Hide indicator on non-task cards ── */
+.canvas-node:not(.is-task-card) .task-indicator {
+  display: none !important;
+}
+
+/* ── Overflow for indicators hanging outside the card ── */
+.canvas-node.is-task-card {
+  overflow: visible !important;
+}
+
+.canvas-node.is-task-card .canvas-node-connection-point,
+.canvas-node.is-task-card .canvas-node-resizer {
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+
+.canvas-node.is-task-card .canvas-node-container {
+  border-style: solid;
+}
+
+/* ── Filter: dim non-matching cards ── */
+.canvas-node.filtered-out {
+  opacity: 0.12 !important;
+  pointer-events: none !important;
+}
+.canvas-node.filtered-out .canvas-node-container {
+  opacity: 0.12 !important;
+}
+.canvas-node.filtered-out .task-indicator {
+  pointer-events: none !important;
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .task-indicator,
+  .task-symbol,
+  .task-priority-dot,
+  .canvas-node.is-completed .canvas-node-container {
+    transition: none !important;
+  }
+}
+
+/* ── Top toolbar (card type, priority, toggle) ── */
+.task-toolbar {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  font-size: 13px;
+  pointer-events: auto;
+}
+
+.task-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.task-toolbar-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 4px;
+}
+
+.task-toolbar button {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  color: var(--text-normal);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.task-toolbar button:hover {
+  background: var(--background-modifier-hover);
+}
+
+.task-toolbar button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.task-toolbar-toggle {
+  font-weight: 600;
+}
+
+/* ── Popup toolbar controls (in card appearance area) ── */
+.task-card-popup-controls button.clickable-icon {
+  font-size: 12px;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 24px;
+  text-align: center;
+  background: transparent;
+  transition: background 0.1s;
+}
+
+.task-card-popup-controls button.clickable-icon:hover {
+  background: var(--background-modifier-hover) !important;
+}
+
+.task-card-popup-controls button.clickable-icon.is-active {
+  background: var(--interactive-accent) !important;
+  color: var(--text-on-accent) !important;
+}
+
+.task-card-prio-btn {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  width: 28px !important;
+}
