@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, PluginSettingTab, Setting, activeDocument } from 'obsidian';
 import type CanvasTaskCardsPlugin from './main';
 
 export class SettingsTab extends PluginSettingTab {
@@ -13,7 +13,10 @@ export class SettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'Canvas Task Cards Settings' });
+    new Setting(containerEl).setName('Canvas Task Cards Settings').setHeading();
+
+    const doc = activeDocument ?? document;
+    const root = doc.documentElement;
 
     new Setting(containerEl)
       .setName('Completed border color')
@@ -23,8 +26,8 @@ export class SettingsTab extends PluginSettingTab {
         .setValue(this.plugin.settings.completedBorderColor)
         .onChange(async value => {
           this.plugin.settings.completedBorderColor = value;
-          document.documentElement.style.setProperty('--task-completed-color', value);
-          document.documentElement.style.setProperty('--task-completed-border-color', value);
+          root.style.setProperty('--task-completed-color', value);
+          root.style.setProperty('--task-completed-border-color', value);
           await this.plugin.saveSettings();
         }));
 
@@ -37,7 +40,7 @@ export class SettingsTab extends PluginSettingTab {
         .setDynamicTooltip()
         .onChange(async value => {
           this.plugin.settings.completedOpacity = value;
-          document.documentElement.style.setProperty('--task-completed-opacity', String(value));
+          root.style.setProperty('--task-completed-opacity', String(value));
           await this.plugin.saveSettings();
         }));
 
@@ -50,7 +53,7 @@ export class SettingsTab extends PluginSettingTab {
         .setDynamicTooltip()
         .onChange(async value => {
           this.plugin.settings.checkboxSize = value;
-          document.documentElement.style.setProperty('--task-indicator-size', `${value}px`);
+          root.style.setProperty('--task-indicator-size', `${value}px`);
           await this.plugin.saveSettings();
         }));
 
@@ -63,7 +66,7 @@ export class SettingsTab extends PluginSettingTab {
         .setDynamicTooltip()
         .onChange(async value => {
           this.plugin.settings.checkboxOffset = value;
-          document.documentElement.style.setProperty('--task-indicator-offset', `${value}px`);
+          root.style.setProperty('--task-indicator-offset', `${value}px`);
           await this.plugin.saveSettings();
         }));
 
@@ -74,11 +77,11 @@ export class SettingsTab extends PluginSettingTab {
         .setValue(this.plugin.settings.enableAnimations)
         .onChange(async value => {
           this.plugin.settings.enableAnimations = value;
-          document.documentElement.classList.toggle('task-card-animations', value);
+          root.classList.toggle('task-card-animations', value);
           await this.plugin.saveSettings();
         }));
 
-    containerEl.createEl('h3', { text: 'Priority Colors' });
+    new Setting(containerEl).setName('Priority Colors').setHeading();
 
     new Setting(containerEl)
       .setName('High priority')
@@ -88,7 +91,7 @@ export class SettingsTab extends PluginSettingTab {
         .setValue(this.plugin.settings.priorityHighColor)
         .onChange(async value => {
           this.plugin.settings.priorityHighColor = value;
-          document.documentElement.style.setProperty('--priority-high-color', value);
+          root.style.setProperty('--priority-high-color', value);
           await this.plugin.saveSettings();
         }));
 
@@ -100,7 +103,7 @@ export class SettingsTab extends PluginSettingTab {
         .setValue(this.plugin.settings.priorityMediumColor)
         .onChange(async value => {
           this.plugin.settings.priorityMediumColor = value;
-          document.documentElement.style.setProperty('--priority-medium-color', value);
+          root.style.setProperty('--priority-medium-color', value);
           await this.plugin.saveSettings();
         }));
 
@@ -112,11 +115,11 @@ export class SettingsTab extends PluginSettingTab {
         .setValue(this.plugin.settings.priorityLowColor)
         .onChange(async value => {
           this.plugin.settings.priorityLowColor = value;
-          document.documentElement.style.setProperty('--priority-low-color', value);
+          root.style.setProperty('--priority-low-color', value);
           await this.plugin.saveSettings();
         }));
 
-    containerEl.createEl('h3', { text: 'Card Type Colors' });
+    new Setting(containerEl).setName('Card Type Colors').setHeading();
 
     new Setting(containerEl)
       .setName('Task type')
@@ -126,7 +129,7 @@ export class SettingsTab extends PluginSettingTab {
         .setValue(this.plugin.settings.typeTaskColor)
         .onChange(async value => {
           this.plugin.settings.typeTaskColor = value;
-          document.documentElement.style.setProperty('--type-task-color', value);
+          root.style.setProperty('--type-task-color', value);
           await this.plugin.saveSettings();
         }));
 
@@ -138,7 +141,7 @@ export class SettingsTab extends PluginSettingTab {
         .setValue(this.plugin.settings.typeQuestionColor)
         .onChange(async value => {
           this.plugin.settings.typeQuestionColor = value;
-          document.documentElement.style.setProperty('--type-question-color', value);
+          root.style.setProperty('--type-question-color', value);
           await this.plugin.saveSettings();
         }));
 
@@ -150,7 +153,7 @@ export class SettingsTab extends PluginSettingTab {
         .setValue(this.plugin.settings.typeImportantColor)
         .onChange(async value => {
           this.plugin.settings.typeImportantColor = value;
-          document.documentElement.style.setProperty('--type-important-color', value);
+          root.style.setProperty('--type-important-color', value);
           await this.plugin.saveSettings();
         }));
 
@@ -162,7 +165,7 @@ export class SettingsTab extends PluginSettingTab {
         .setValue(this.plugin.settings.typeIdeaColor)
         .onChange(async value => {
           this.plugin.settings.typeIdeaColor = value;
-          document.documentElement.style.setProperty('--type-idea-color', value);
+          root.style.setProperty('--type-idea-color', value);
           await this.plugin.saveSettings();
         }));
 
@@ -174,7 +177,7 @@ export class SettingsTab extends PluginSettingTab {
         .setValue(this.plugin.settings.typeInfoColor)
         .onChange(async value => {
           this.plugin.settings.typeInfoColor = value;
-          document.documentElement.style.setProperty('--type-info-color', value);
+          root.style.setProperty('--type-info-color', value);
           await this.plugin.saveSettings();
         }));
   }

@@ -40,43 +40,82 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   typeInfoColor: '#00acc1',
 };
 
-export interface CanvasNode {
+export interface PersistedPluginData {
+  settings?: Partial<PluginSettings>;
+  taskData?: Record<string, Record<string, TaskCardData>>;
+}
+
+// ── Canvas API types ──
+
+export interface CanvasNodeData {
   id: string;
   type: string;
-  text?: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  text?: string;
+  file?: string;
   color?: string;
-  elementEl?: HTMLElement;
-  containerEl: HTMLElement;
-  contentEl: HTMLElement;
-  isEditing: boolean;
-  setColor(color: string): void;
-  setData(data: Record<string, unknown>): void;
-  getData(): Record<string, unknown>;
 }
 
-export interface Canvas {
-  nodes: Map<string, CanvasNode>;
-  edges: Map<string, unknown>;
+export interface ExtendedCanvasNode {
+  id: string;
+  type: string;
+  text?: string;
+  file?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  elementEl?: HTMLElement;
+  containerEl?: HTMLElement;
+  contentEl?: HTMLElement;
+  getData(): Record<string, unknown>;
+  setData(data: Record<string, unknown>): void;
+}
+
+export interface SelectionData {
+  nodes: Array<{ id: string }>;
+}
+
+export interface CanvasMenu {
+  menuEl: HTMLElement;
+  render(...args: unknown[]): void;
+}
+
+export interface CanvasSelection {
+  size: number;
+  values(): IterableIterator<unknown>;
+  forEach(fn: (...args: unknown[]) => void): void;
+  [Symbol.iterator](): IterableIterator<unknown>;
+}
+
+export interface ExtendedCanvas {
+  nodes: Map<string, ExtendedCanvasNode> | Record<string, ExtendedCanvasNode>;
   wrapperEl: HTMLElement;
-  view: {
-    currentZoom: number;
-  };
-  selection: Set<CanvasNode> | Map<string, CanvasNode> | CanvasNode[];
+  nodeEl?: HTMLElement;
+  containerEl?: HTMLElement;
+  selection: CanvasSelection | Set<unknown> | Map<string, unknown>;
+  menu?: CanvasMenu;
   on(event: string, cb: (...args: unknown[]) => void): void;
   off(event: string, cb: (...args: unknown[]) => void): void;
   requestSave(): void;
-}
-
-export interface CanvasView {
-  canvas: Canvas;
-  file: { path: string } | null;
-}
-
-export interface PersistedPluginData {
-  settings?: Partial<PluginSettings>;
-  taskData?: Record<string, Record<string, TaskCardData>>;
+  getData(): { nodes: CanvasNodeData[] };
+  setData(data: { nodes: CanvasNodeData[] }): void;
+  getSelectionData(): SelectionData;
+  posFromEvt(evt: MouseEvent): { x: number; y: number } | null;
+  createTextNode(config: {
+    pos: { x: number; y: number };
+    size: { width: number; height: number };
+    text: string;
+  }): ExtendedCanvasNode | null;
+  createNode(
+    type: string,
+    config: { x: number; y: number; width: number; height: number; text: string },
+  ): ExtendedCanvasNode | null;
+  addNode(
+    type: string,
+    config: { x: number; y: number; width: number; height: number; text: string },
+  ): ExtendedCanvasNode | null;
 }

@@ -1,12 +1,17 @@
-import { Notice, Menu } from 'obsidian';
+import { Notice, activeDocument } from 'obsidian';
 import type CanvasTaskCardsPlugin from './main';
-import type { CardType, Priority } from './types';
+import type {
+  CardType,
+  Priority,
+  ExtendedCanvas,
+  ExtendedCanvasNode,
+} from './types';
 import { TaskRenderer } from './renderer';
 
 export class CanvasManager {
   plugin: CanvasTaskCardsPlugin;
   renderer: TaskRenderer;
-  activeCanvas: any = null;
+  activeCanvas: ExtendedCanvas | null = null;
   currentCanvasPath: string = '';
   private cleanupFns: Array<() => void> = [];
   private mutationObserver: MutationObserver | null = null;
@@ -16,6 +21,19 @@ export class CanvasManager {
   private filterState: { cardType?: CardType; priority?: Priority } | null = null;
   private toolbarEl: HTMLElement | null = null;
   private selectedTaskNodeId: string | null = null;
+
+  private get doc(): Document {
+    return activeDocument ?? document;
+  }
+
+  private getNodeFromCanvas(canvas: ExtendedCanvas | null, nodeId: string): ExtendedCanvasNode | null {
+    if (!canvas?.nodes) return null;
+    const nodes = canvas.nodes;
+    if (nodes instanceof Map) {
+      return nodes.get(nodeId) ?? null;
+    }
+    return (nodes as Record<string, ExtendedCanvasNode>)[nodeId] ?? null;
+  }
 
   constructor(plugin: CanvasTaskCardsPlugin) {
     this.plugin = plugin;
@@ -55,18 +73,19 @@ export class CanvasManager {
         return;
       }
 
-      const canvas = (leaf.view as any).canvas;
+      const view = leaf.view as unknown as { canvas: ExtendedCanvas; file?: { path: string } };
+      const canvas = view.canvas;
       if (!canvas) {
         this.scheduleRetry();
         return;
       }
 
-      const filePath = ((leaf.view as any).file?.path ?? '') as string;
+      const filePath = view.file?.path ?? '';
       if (canvas !== this.activeCanvas) {
         this.setupCanvas(canvas, filePath);
       }
       this.canvasRetryCount = 0;
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Canvas Task Cards: handleActiveLeaf error', e);
       this.teardownCanvas();
     }
@@ -84,11 +103,11 @@ export class CanvasManager {
     }
   }
 
-  private setupCanvas(canvas: any, path: string): void {
+  private setupCanvas(canvas: ExtendedCanvas, path: string): void {
     this.teardownCanvas();
 
     // Remove legacy floating button if any
-    document.querySelectorAll('.task-card-floating-btn').forEach(el => el.remove());
+    this.doc.querySelectorAll('.task-card-floating-btn').forEach(el => el.remove());
 
     this.activeCanvas = canvas;
     this.currentCanvasPath = path;
@@ -100,7 +119,7 @@ export class CanvasManager {
       this.setupContextMenu();
       this.setupPopupMenu();
       this.setupToolbar();
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Canvas Task Cards: setupCanvas error', e);
     }
   }
@@ -121,15 +140,16 @@ export class CanvasManager {
     const nodes = this.activeCanvas.nodes;
     if (!nodes) return;
 
-    const processNode = (node: any) => {
+    const processNode = (node: ExtendedCanvasNode) => {
       if (node && node.id) this.checkAndRender(node);
     };
 
-    if (typeof nodes.forEach === 'function') {
+    if (nodes instanceof Map) {
       nodes.forEach(processNode);
     } else if (typeof nodes === 'object') {
-      for (const id of Object.keys(nodes)) {
-        processNode(nodes[id]);
+      const record = nodes as Record<string, ExtendedCanvasNode>;
+      for (const id of Object.keys(record)) {
+        processNode(record[id]);
       }
     }
   }
@@ -138,10 +158,10 @@ export class CanvasManager {
     const canvas = this.activeCanvas;
     if (!canvas || typeof canvas.on !== 'function') return;
 
-    const onNodeAdded = (node: any) => {
+    const onNodeAdded = (node: ExtendedCanvasNode) => {
       this.checkAndRender(node);
     };
-    const onNodeRemoved = (node: any) => {
+    const onNodeRemoved = (node: ExtendedCanvasNode) => {
       const nodeEl = this.getNodeEl(node);
       if (nodeEl) this.renderer.remove(nodeEl);
     };
@@ -152,12 +172,12 @@ export class CanvasManager {
       this.cleanupFns.push(() => {
         try {
           canvas.off('nodeAdded', onNodeAdded);
-        } catch {}
+        } catch { /* noop */ }
         try {
           canvas.off('nodeRemoved', onNodeRemoved);
-        } catch {}
+        } catch { /* noop */ }
       });
-    } catch {}
+    } catch { /* noop */ }
   }
 
   private attachMutationObserver(): void {
@@ -176,7 +196,7 @@ export class CanvasManager {
           // Strategy 1: data-id attribute
           const dataId = nodeEl.dataset?.id;
           if (dataId) {
-            const node = this.activeCanvas?.nodes?.get?.(dataId) ?? this.activeCanvas?.nodes?.[dataId];
+            const node = this.getNodeFromCanvas(this.activeCanvas, dataId);
             if (node) { this.renderNodeOnElement(nodeEl, node); continue; }
           }
 
@@ -261,7 +281,10 @@ export class CanvasManager {
   private tryWorkspaceContextMenu(): void {
     try {
       const eventName = 'canvas:node-menu';
-      const handler = (menu: any, node: any) => {
+      const handler = (menu: {
+        addSeparator: () => void;
+        addItem: (cb: (item: { setTitle: (t: string) => void; onClick: (fn: () => void) => void }) => void) => void;
+      }, node: ExtendedCanvasNode) => {
         try {
           if (!node || !node.id) return;
           let resolvedNode = node;
@@ -271,15 +294,17 @@ export class CanvasManager {
           }
           if (resolvedNode.type !== 'text' && resolvedNode.type !== 'file') return;
           this.handleNodeContextMenuViaApi(menu, resolvedNode);
-        } catch (e) {
+        } catch (e: unknown) {
           console.error('Canvas Task Cards: canvas:node-menu handler error', e);
         }
       };
-      (this.plugin.app.workspace as any).on(eventName, handler);
+      const ws = this.plugin.app.workspace;
+      const wsOn = (ws as unknown as Record<string, (...args: unknown[]) => void>).on;
+      wsOn(eventName, handler);
       this.cleanupFns.push(() => {
-        try { (this.plugin.app.workspace as any).off(eventName, handler); } catch {}
+        try { (ws as unknown as Record<string, (...args: unknown[]) => void>).off?.(eventName, handler); } catch { /* noop */ }
       });
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Canvas Task Cards: Error registering workspace event', e);
     }
   }
@@ -299,26 +324,29 @@ export class CanvasManager {
     ['high', 'High'],
   ];
 
-  private handleNodeContextMenuViaApi(menu: any, node: any): void {
+  private handleNodeContextMenuViaApi(menu: {
+    addSeparator: () => void;
+    addItem: (cb: (item: { setTitle: (t: string) => void; onClick: (fn: () => void) => void }) => void) => void;
+  }, node: ExtendedCanvasNode): void {
     const isTask = this.plugin.storage.has(this.currentCanvasPath, node.id);
     const data = isTask ? this.plugin.storage.get(this.currentCanvasPath, node.id) : null;
 
     menu.addSeparator();
 
     if (isTask && data) {
-      menu.addItem((item: any) => {
+      menu.addItem((item: { setTitle: (t: string) => void; onClick: (fn: () => void) => void }) => {
         item.setTitle(data.completed ? '↩ Mark Todo' : '✓ Mark Completed');
-        item.onClick(() => this.handleCheckboxClick(node.id));
+        item.onClick(() => void this.handleCheckboxClick(node.id));
       });
 
-      menu.addItem((item: any) => {
+      menu.addItem((item: { setTitle: (t: string) => void; onClick: (fn: () => void) => void }) => {
         item.setTitle('Convert to Normal Card');
-        item.onClick(() => this.convertToNormal(node.id));
+        item.onClick(() => void this.convertToNormal(node.id));
       });
     } else {
-      menu.addItem((item: any) => {
+      menu.addItem((item: { setTitle: (t: string) => void; onClick: (fn: () => void) => void }) => {
         item.setTitle('Convert to Task Card');
-        item.onClick(() => this.convertToTask(node.id));
+        item.onClick(() => void this.convertToTask(node.id));
       });
     }
   }
@@ -331,19 +359,19 @@ export class CanvasManager {
       const nodeEl = target.closest('.canvas-node') as HTMLElement | null;
       if (nodeEl) return;
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         this.injectAddTaskCardIntoEmptyMenu();
       }, 200);
     };
 
-    document.addEventListener('contextmenu', handler, true);
+    this.doc.addEventListener('contextmenu', handler, true);
     this.cleanupFns.push(() => {
-      document.removeEventListener('contextmenu', handler, true);
+      this.doc.removeEventListener('contextmenu', handler, true);
     });
   }
 
   private injectAddTaskCardIntoEmptyMenu(): void {
-    const menus = document.body.querySelectorAll('.menu');
+    const menus = this.doc.body.querySelectorAll('.menu');
     if (menus.length === 0) return;
 
     for (let mi = 0; mi < menus.length; mi++) {
@@ -352,13 +380,19 @@ export class CanvasManager {
 
     const menuEl = menus[menus.length - 1] as HTMLElement;
 
-    const sep = document.createElement('div');
+    const sep = this.doc.createElement('div');
     sep.className = 'menu-separator';
     menuEl.appendChild(sep);
 
-    const item = document.createElement('div');
+    const item = this.doc.createElement('div');
     item.className = 'menu-item task-card-add-item';
-    item.innerHTML = '<span class="menu-item-icon"></span><span class="menu-item-title">Add Task Card</span>';
+    const iconSpan = this.doc.createElement('span');
+    iconSpan.className = 'menu-item-icon';
+    item.appendChild(iconSpan);
+    const titleSpan = this.doc.createElement('span');
+    titleSpan.className = 'menu-item-title';
+    titleSpan.textContent = 'Add Task Card';
+    item.appendChild(titleSpan);
     item.addEventListener('click', (e) => {
       e.stopPropagation();
       this.addNewTaskCard();
@@ -374,19 +408,19 @@ export class CanvasManager {
     if (!canvas?.menu?.menuEl) return;
 
     const menu = canvas.menu;
+    if (!menu) return;
     const origRender = menu.render.bind(menu);
-    const self = this;
 
-    menu.render = function (...args: any[]) {
-      origRender.apply(this, args);
-      try { self.injectIntoPopupMenu(menu); }
-      catch (e) { console.error('Canvas Task Cards: popup inject error', e); }
+    menu.render = (...args: unknown[]) => {
+      origRender.call(menu, ...args);
+      try { this.injectIntoPopupMenu(menu); }
+      catch (e: unknown) { console.error('Canvas Task Cards: popup inject error', e); }
     };
 
     this.cleanupFns.push(() => { menu.render = origRender; });
   }
 
-  private injectIntoPopupMenu(menu: any): void {
+  private injectIntoPopupMenu(menu: { menuEl: HTMLElement }): void {
     const menuEl = menu.menuEl;
     if (!menuEl) return;
 
@@ -401,15 +435,15 @@ export class CanvasManager {
     if (!data?.taskCard) return;
 
     // ── Row 1: Card Type buttons ──
-    const typeRow = document.createElement('div');
+    const typeRow = this.doc.createElement('div');
     typeRow.className = 'task-card-popup-controls';
 
-    const typeGroup = document.createElement('span');
-    typeGroup.style.cssText = 'display:inline-flex;gap:2px;align-items:center;margin:4px 8px 2px 8px;';
+    const typeGroup = this.doc.createElement('span');
+    typeGroup.className = 'task-card-popup-controls-group';
 
-    const typeLabel = document.createElement('span');
+    const typeLabel = this.doc.createElement('span');
     typeLabel.textContent = 'Type:';
-    typeLabel.style.cssText = 'font-size:11px;font-weight:600;margin-right:4px;color:var(--text-muted);';
+    typeLabel.className = 'task-card-popup-controls-label';
     typeGroup.appendChild(typeLabel);
 
     const typeSymbols: Record<CardType, string> = {
@@ -417,35 +451,35 @@ export class CanvasManager {
     };
 
     for (const [t, _label] of this.cardTypeLabels) {
-      const btn = document.createElement('button');
+      const btn = this.doc.createElement('button');
       btn.textContent = typeSymbols[t as CardType] || t;
       btn.title = _label;
       btn.dataset.cardType = t;
       btn.className = 'clickable-icon task-card-type-btn';
       btn.classList.toggle('is-active', t === data.cardType);
-      btn.addEventListener('click', () => this.setCardType(nodeId, t as CardType));
+      btn.addEventListener('click', () => void this.setCardType(nodeId, t as CardType));
       typeGroup.appendChild(btn);
     }
 
     typeRow.appendChild(typeGroup);
 
     // ── Row 2: Priority buttons ──
-    const prioGroup = document.createElement('span');
-    prioGroup.style.cssText = 'display:inline-flex;gap:2px;align-items:center;margin:0 8px 4px 8px;';
+    const prioGroup = this.doc.createElement('span');
+    prioGroup.className = 'task-card-popup-controls-group';
 
-    const prioLabel = document.createElement('span');
+    const prioLabel = this.doc.createElement('span');
     prioLabel.textContent = 'Priority:';
-    prioLabel.style.cssText = 'font-size:11px;font-weight:600;margin-right:4px;color:var(--text-muted);';
+    prioLabel.className = 'task-card-popup-controls-label';
     prioGroup.appendChild(prioLabel);
 
     for (const [p, label] of this.priorityLabels) {
-      const btn = document.createElement('button');
+      const btn = this.doc.createElement('button');
       btn.textContent = label === 'None' ? '–' : label === 'Low' ? '▼' : label === 'Medium' ? '◆' : '▲';
       btn.title = label;
       btn.dataset.priority = p;
       btn.className = 'clickable-icon task-card-prio-btn';
       btn.classList.toggle('is-active', p === data.priority);
-      btn.addEventListener('click', () => this.setPriority(nodeId, p as Priority));
+      btn.addEventListener('click', () => void this.setPriority(nodeId, p as Priority));
       prioGroup.appendChild(btn);
     }
 
@@ -468,9 +502,9 @@ export class CanvasManager {
       if (sel && sel.length === 1) return sel[0].id;
       // Fallback: iterate selection
       if (canvas.selection && typeof canvas.selection.size === 'number' && canvas.selection.size === 1) {
-        for (const id of canvas.selection) return id;
+        for (const id of canvas.selection as Iterable<string>) return id;
       }
-    } catch {}
+    } catch { /* noop */ }
     return null;
   }
 
@@ -480,27 +514,26 @@ export class CanvasManager {
     const wrapper = this.getCanvasWrapper();
     if (!wrapper) return;
 
-    const toolbar = document.createElement('div');
+    const toolbar = this.doc.createElement('div');
     toolbar.className = 'task-toolbar';
-    toolbar.style.display = 'none';
 
     // Card Type buttons
-    const typeGroup = document.createElement('div');
+    const typeGroup = this.doc.createElement('div');
     typeGroup.className = 'task-toolbar-group';
 
-    const typeLabel = document.createElement('span');
+    const typeLabel = this.doc.createElement('span');
     typeLabel.className = 'task-toolbar-label';
     typeLabel.textContent = 'Type';
     typeGroup.appendChild(typeLabel);
 
     for (const [t, label] of this.cardTypeLabels) {
-      const btn = document.createElement('button');
+      const btn = this.doc.createElement('button');
       btn.className = 'task-type-btn';
       btn.dataset.cardType = t;
       btn.textContent = label;
       btn.addEventListener('click', () => {
         if (this.selectedTaskNodeId) {
-          this.setCardType(this.selectedTaskNodeId, t);
+          void this.setCardType(this.selectedTaskNodeId, t);
           this.updateToolbarState();
         }
       });
@@ -510,22 +543,22 @@ export class CanvasManager {
     toolbar.appendChild(typeGroup);
 
     // Priority buttons
-    const prioGroup = document.createElement('div');
+    const prioGroup = this.doc.createElement('div');
     prioGroup.className = 'task-toolbar-group';
 
-    const prioLabel = document.createElement('span');
+    const prioLabel = this.doc.createElement('span');
     prioLabel.className = 'task-toolbar-label';
     prioLabel.textContent = 'Priority';
     prioGroup.appendChild(prioLabel);
 
     for (const [p, label] of this.priorityLabels) {
-      const btn = document.createElement('button');
+      const btn = this.doc.createElement('button');
       btn.className = 'task-prio-btn';
       btn.dataset.priority = p;
       btn.textContent = label;
       btn.addEventListener('click', () => {
         if (this.selectedTaskNodeId) {
-          this.setPriority(this.selectedTaskNodeId, p);
+          void this.setPriority(this.selectedTaskNodeId, p);
           this.updateToolbarState();
         }
       });
@@ -535,18 +568,18 @@ export class CanvasManager {
     toolbar.appendChild(prioGroup);
 
     // Toggle button
-    const toggleBtn = document.createElement('button');
+    const toggleBtn = this.doc.createElement('button');
     toggleBtn.className = 'task-toolbar-toggle';
     toggleBtn.textContent = '✓ Done';
     toggleBtn.addEventListener('click', () => {
       if (this.selectedTaskNodeId) {
-        this.handleCheckboxClick(this.selectedTaskNodeId);
+        void this.handleCheckboxClick(this.selectedTaskNodeId);
         this.updateToolbarState();
       }
     });
     toolbar.appendChild(toggleBtn);
 
-    document.body.appendChild(toolbar);
+    this.doc.body.appendChild(toolbar);
     this.toolbarEl = toolbar;
 
     // Show/hide on card click via document mousedown (capture phase)
@@ -568,19 +601,19 @@ export class CanvasManager {
       }
       this.hideToolbar();
     };
-    document.addEventListener('mousedown', mousedownHandler, true);
-    this.cleanupFns.push(() => document.removeEventListener('mousedown', mousedownHandler, true));
+    this.doc.addEventListener('mousedown', mousedownHandler, true);
+    this.cleanupFns.push(() => this.doc.removeEventListener('mousedown', mousedownHandler, true));
   }
 
   private showToolbar(nodeId: string): void {
     if (!this.toolbarEl) return;
     this.selectedTaskNodeId = nodeId;
     this.updateToolbarState();
-    this.toolbarEl.style.display = 'flex';
+    this.toolbarEl.classList.add('is-visible');
   }
 
   private hideToolbar(): void {
-    if (this.toolbarEl) this.toolbarEl.style.display = 'none';
+    if (this.toolbarEl) this.toolbarEl.classList.remove('is-visible');
     this.selectedTaskNodeId = null;
   }
 
@@ -611,16 +644,16 @@ export class CanvasManager {
     const nodes = this.activeCanvas?.nodes;
     if (!nodes) return null;
 
-    if (typeof nodes.forEach === 'function') {
-      let found: string | null = null;
-      nodes.forEach((n: any) => {
-        if (n && n.elementEl === nodeEl) found = n.id;
-      });
-      return found;
+    if (nodes instanceof Map) {
+      for (const n of nodes.values()) {
+        if (n.elementEl === nodeEl) return n.id;
+      }
+      return null;
     }
     if (typeof nodes === 'object') {
-      for (const id of Object.keys(nodes)) {
-        if (nodes[id]?.elementEl === nodeEl) return id;
+      const record = nodes as Record<string, ExtendedCanvasNode>;
+      for (const id of Object.keys(record)) {
+        if (record[id]?.elementEl === nodeEl) return id;
       }
     }
     return null;
@@ -658,9 +691,9 @@ export class CanvasManager {
     this.createNodeViaAddNode(canvas, x, y);
   }
 
-  private createNodeViaCreateTextNode(canvas: any, x: number, y: number): boolean {
+  private createNodeViaCreateTextNode(canvas: ExtendedCanvas, x: number, y: number): boolean {
     try {
-      let node: any = null;
+      let node: ExtendedCanvasNode | null = null;
 
       if (typeof canvas.createTextNode === 'function') {
         node = canvas.createTextNode({
@@ -683,13 +716,13 @@ export class CanvasManager {
       }
 
       return true;
-    } catch (e) {
-      console.warn('Canvas Task Cards: createTextNode failed', e.message?.slice(0, 100));
+    } catch (e: unknown) {
+      console.warn('Canvas Task Cards: createTextNode failed', e instanceof Error ? e.message.slice(0, 100) : e);
       return false;
     }
   }
 
-  private createNodeViaData(canvas: any, x: number, y: number): string | null {
+  private createNodeViaData(canvas: ExtendedCanvas, x: number, y: number): string | null {
     try {
       if (typeof canvas.getData !== 'function' || typeof canvas.setData !== 'function') {
         console.warn('Canvas Task Cards: getData/setData not available');
@@ -724,38 +757,38 @@ export class CanvasManager {
       let attempts = 0;
       const check = () => {
         attempts++;
-        const n = canvas.nodes?.get?.(id) ?? canvas.nodes?.[id];
+        const n = this.getNodeFromCanvas(canvas, id);
         if (n) {
           return;
         }
         if (attempts < 30) {
-          setTimeout(check, 100);
+          window.setTimeout(check, 100);
         } else {
           console.error('Canvas Task Cards: node never appeared after setData');
         }
       };
-      setTimeout(check, 100);
+      window.setTimeout(check, 100);
 
       return id;
-    } catch (e) {
-      console.warn('Canvas Task Cards: createNodeViaData failed', e.message?.slice(0, 100));
+    } catch (e: unknown) {
+      console.warn('Canvas Task Cards: createNodeViaData failed', e instanceof Error ? e.message.slice(0, 100) : e);
       return null;
     }
   }
 
-  private createNodeViaAddNode(canvas: any, x: number, y: number): void {
+  private createNodeViaAddNode(canvas: ExtendedCanvas, x: number, y: number): void {
     try {
-      let node: any = null;
+      let node: ExtendedCanvasNode | null = null;
       try {
         if (typeof canvas.addNode === 'function') {
           node = canvas.addNode('text', { x, y, width: 300, height: 200, text: '' });
         } else if (typeof canvas.createNode === 'function') {
-          node = canvas.createNode({ type: 'text', x, y, width: 300, height: 200, text: '' });
+          node = (canvas as unknown as Record<string, (...args: unknown[]) => ExtendedCanvasNode | null>).createNode?.({ type: 'text', x, y, width: 300, height: 200, text: '' }) ?? null;
         } else if (typeof canvas.createTextNode === 'function') {
           node = canvas.createTextNode({ pos: { x, y }, size: { width: 300, height: 200 }, text: '' });
         }
-      } catch (e) {
-        console.warn('Canvas Task Cards: addNode threw', e.message?.slice(0, 100));
+      } catch (e: unknown) {
+        console.warn('Canvas Task Cards: addNode threw', e instanceof Error ? e.message.slice(0, 100) : e);
         try {
           const proto = Object.getPrototypeOf(canvas);
           const unpatched = proto?.addNode;
@@ -776,43 +809,43 @@ export class CanvasManager {
 
       if (node && node.id) {
         this.finalizeNode(canvas, node.id);
-        const tryRender = (n: any, attempts: number) => {
+        const tryRender = (n: ExtendedCanvasNode, attempts: number) => {
           if (n.elementEl && n.elementEl.isConnected) {
             this.checkAndRender(n);
             return;
           }
-          if (attempts > 0) setTimeout(() => tryRender(n, attempts - 1), 150);
+          if (attempts > 0) window.setTimeout(() => tryRender(n, attempts - 1), 150);
         };
         tryRender(node, 10);
       } else {
         console.error('Canvas Task Cards: all addNode methods failed');
         new Notice('Canvas Task Cards: Could not create node');
       }
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Canvas Task Cards: createNodeViaAddNode error', e);
       new Notice('Canvas Task Cards: Could not create node');
     }
   }
 
-  private finalizeNode(canvas: any, nodeId: string): void {
+  private finalizeNode(canvas: ExtendedCanvas, nodeId: string): void {
     this.plugin.storage.set(this.currentCanvasPath, nodeId, {
       taskCard: true,
       completed: false,
       cardType: 'task',
       priority: 'none',
     });
-    this.plugin.saveSettings();
+    void this.plugin.saveSettings();
 
     const renderCheck = (retries: number) => {
-      const n = canvas.nodes?.get?.(nodeId) ?? canvas.nodes?.[nodeId];
+      const n = this.getNodeFromCanvas(canvas, nodeId);
       const el = n ? this.getNodeEl(n) : null;
 
       if (el && el.isConnected) {
-        this.checkAndRender(n);
+        this.checkAndRender(n!);
         return;
       }
       if (retries > 0) {
-        setTimeout(() => renderCheck(retries - 1), 200);
+        window.setTimeout(() => renderCheck(retries - 1), 200);
       } else {
         // Final try: mutation observer may still fire
         if (n) this.checkAndRender(n);
@@ -821,20 +854,21 @@ export class CanvasManager {
     renderCheck(30);
   }
 
-  private findNodeAtPosition(canvas: any, x: number, y: number): any {
+  private findNodeAtPosition(canvas: ExtendedCanvas, x: number, y: number): ExtendedCanvasNode | null {
     const nodes = canvas.nodes;
     if (!nodes) return null;
 
-    const matches: any[] = [];
-    if (typeof nodes.forEach === 'function') {
-      nodes.forEach((n: any) => {
+    const matches: ExtendedCanvasNode[] = [];
+    if (nodes instanceof Map) {
+      nodes.forEach((n: ExtendedCanvasNode) => {
         if (n && Math.abs(n.x - x) < 2 && Math.abs(n.y - y) < 2) {
           matches.push(n);
         }
       });
     } else if (typeof nodes === 'object') {
-      for (const id of Object.keys(nodes)) {
-        const n = nodes[id];
+      const record = nodes as Record<string, ExtendedCanvasNode>;
+      for (const id of Object.keys(record)) {
+        const n = record[id];
         if (n && Math.abs(n.x - x) < 2 && Math.abs(n.y - y) < 2) {
           matches.push(n);
         }
@@ -848,12 +882,12 @@ export class CanvasManager {
     return null;
   }
 
-  private getNodeEl(node: any): HTMLElement | null {
+  private getNodeEl(node: ExtendedCanvasNode): HTMLElement | null {
     if (node?.elementEl) return node.elementEl;
     if (!node?.id) return null;
 
     // Try data-id query
-    let el = document.querySelector(`.canvas-node[data-id="${node.id}"]`) as HTMLElement | null;
+    let el = this.doc.querySelector(`.canvas-node[data-id="${node.id}"]`) as HTMLElement | null;
     if (el) return el;
 
     // Try within wrapper
@@ -878,14 +912,13 @@ export class CanvasManager {
     return null;
   }
 
-  private getNodeEntries(): any[] {
+  private getNodeEntries(): ExtendedCanvasNode[] {
     if (!this.activeCanvas?.nodes) return [];
-    if (typeof this.activeCanvas.nodes.forEach === 'function') {
-      const arr: any[] = [];
-      this.activeCanvas.nodes.forEach((n: any) => arr.push(n));
-      return arr;
+    const nodes = this.activeCanvas.nodes;
+    if (nodes instanceof Map) {
+      return [...nodes.values()];
     }
-    return Object.values(this.activeCanvas.nodes);
+    return Object.values(nodes) as ExtendedCanvasNode[];
   }
 
   private parseTransformPosition(transform: string): { x: number; y: number } | null {
@@ -897,25 +930,25 @@ export class CanvasManager {
     return null;
   }
 
-  private renderNodeOnElement(nodeEl: HTMLElement, node: any): void {
+  private renderNodeOnElement(nodeEl: HTMLElement, node: ExtendedCanvasNode): void {
     if (!node || !node.id) return;
     let nodeType = node.type;
     if (!nodeType && typeof node.getData === 'function') {
-      try { nodeType = node.getData().type; } catch {}
+      try { nodeType = node.getData().type as string; } catch { /* noop */ }
     }
-    if (!nodeType && node.text !== undefined) nodeType = 'text';
-    if (!nodeType && node.file) nodeType = 'file';
+    if (!nodeType && node.text !== undefined) nodeType = 'text' as const;
+    if (!nodeType && node.file) nodeType = 'file' as const;
     if (nodeType !== 'text' && nodeType !== 'file') return;
     const data = this.plugin.storage.get(this.currentCanvasPath, node.id);
     if (!data?.taskCard) return;
     this.renderer.render(nodeEl, node.id, data);
   }
 
-  private checkAndRender(node: any): void {
+  private checkAndRender(node: ExtendedCanvasNode): void {
     if (!node || !node.id) return;
     const nodeEl = this.getNodeEl(node);
     if (!nodeEl) return;
-    const nodeType = node.type || node.getData?.()?.type;
+    const nodeType = node.type || (node.getData?.()?.type as string);
     if (nodeType !== 'text' && nodeType !== 'file') return;
     const data = this.plugin.storage.get(this.currentCanvasPath, node.id);
     if (!data?.taskCard) return;
@@ -939,16 +972,13 @@ export class CanvasManager {
     for (const fn of this.cleanupFns) {
       try {
         fn();
-      } catch {}
+      } catch { /* noop */ }
     }
     this.cleanupFns = [];
   }
 
-  private resolveNode(nodeId: string): any {
-    return (
-      this.activeCanvas?.nodes?.get?.(nodeId) ??
-      this.activeCanvas?.nodes?.[nodeId]
-    );
+  private resolveNode(nodeId: string): ExtendedCanvasNode | null {
+    return this.getNodeFromCanvas(this.activeCanvas, nodeId);
   }
 
   async handleCheckboxClick(nodeId: string): Promise<void> {
@@ -1057,19 +1087,19 @@ export class CanvasManager {
     this.renderer.render(nodeEl, nodeId, data);
   }
 
-  getSelectedNodes(): any[] {
+  getSelectedNodes(): ExtendedCanvasNode[] {
     if (!this.activeCanvas) return [];
     try {
       const sel = this.activeCanvas.selection;
       if (!sel) return [];
-      if (typeof sel.values === 'function') return [...sel.values()];
+      if (typeof sel.values === 'function') return [...sel.values()] as ExtendedCanvasNode[];
       if (typeof sel.forEach === 'function') {
-        const arr: any[] = [];
-        sel.forEach((v: any) => arr.push(v));
+        const arr: ExtendedCanvasNode[] = [];
+        sel.forEach((v: ExtendedCanvasNode) => arr.push(v));
         return arr;
       }
       if (Array.isArray(sel)) return sel;
-    } catch {}
+    } catch { /* noop */ }
     return [];
   }
 
