@@ -1,4 +1,4 @@
-import { Plugin, Notice } from 'obsidian';
+import { Plugin, Notice, activeDocument } from 'obsidian';
 import { DEFAULT_SETTINGS, type PluginSettings, type PersistedPluginData } from './types';
 import { SettingsTab } from './settings';
 import { TaskStorage } from './storage';
@@ -35,7 +35,7 @@ export default class CanvasTaskCardsPlugin extends Plugin {
       const data = (await this.loadData()) as PersistedPluginData | null;
       this.settings = Object.assign({}, DEFAULT_SETTINGS, data?.settings ?? {});
       this.storage.load(data?.taskData ?? {});
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Canvas Task Cards: Error loading data', e);
       this.settings = { ...DEFAULT_SETTINGS };
     }
@@ -47,13 +47,13 @@ export default class CanvasTaskCardsPlugin extends Plugin {
         settings: this.settings,
         taskData: this.storage.export(),
       } satisfies PersistedPluginData);
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Canvas Task Cards: Error saving data', e);
     }
   }
 
   private applySettingsToCSS(): void {
-    const root = document.documentElement;
+    const root = (activeDocument ?? document).documentElement;
     root.style.setProperty('--task-completed-color', this.settings.completedBorderColor);
     root.style.setProperty('--task-completed-border-color', this.settings.completedBorderColor);
     root.style.setProperty('--task-completed-opacity', String(this.settings.completedOpacity));

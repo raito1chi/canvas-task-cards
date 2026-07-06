@@ -19,7 +19,7 @@ export class TaskRenderer {
   render(nodeEl: HTMLElement, nodeId: string, data: TaskCardData): void {
     let indicator = nodeEl.querySelector('.task-indicator') as HTMLElement;
     if (!indicator) {
-      indicator = document.createElement('div');
+      indicator = nodeEl.ownerDocument.createElement('div');
       indicator.className = 'task-indicator';
       indicator.setAttribute('role', 'checkbox');
       indicator.setAttribute('tabindex', '0');
@@ -39,15 +39,15 @@ export class TaskRenderer {
         if (e.key === 'Enter' || e.key === ' ') {
           e.stopPropagation();
           e.preventDefault();
-          this.plugin.canvasManager.handleCheckboxClick(nodeId);
+        void this.plugin.canvasManager.handleCheckboxClick(nodeId);
         }
       });
 
-      const dot = document.createElement('span');
+      const dot = indicator.ownerDocument.createElement('span');
       dot.className = 'task-priority-dot';
       indicator.appendChild(dot);
 
-      const symbol = document.createElement('span');
+      const symbol = indicator.ownerDocument.createElement('span');
       symbol.className = 'task-symbol';
       indicator.appendChild(symbol);
 
