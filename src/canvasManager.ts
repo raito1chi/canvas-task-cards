@@ -1,4 +1,4 @@
-import { Notice, activeDocument } from 'obsidian';
+import { Notice, activeDocument, View } from 'obsidian';
 import type CanvasTaskCardsPlugin from './main';
 import type {
   CardType,
@@ -32,7 +32,7 @@ export class CanvasManager {
     if (nodes instanceof Map) {
       return nodes.get(nodeId) ?? null;
     }
-    return (nodes as Record<string, ExtendedCanvasNode>)[nodeId] ?? null;
+    return nodes[nodeId] ?? null;
   }
 
   constructor(plugin: CanvasTaskCardsPlugin) {
@@ -57,23 +57,26 @@ export class CanvasManager {
 
   private handleActiveLeaf(): void {
     try {
-      const leaf = this.plugin.app.workspace.activeLeaf;
-      if (!leaf || !leaf.view) {
+      const view = this.plugin.app.workspace.getActiveViewOfType(View) as unknown as {
+        getViewType: () => string;
+        canvas?: ExtendedCanvas;
+        file?: { path: string };
+      } | null;
+      if (!view) {
         this.scheduleRetry();
         return;
       }
 
-      if (typeof leaf.view.getViewType !== 'function') {
+      if (typeof view.getViewType !== 'function') {
         this.scheduleRetry();
         return;
       }
 
-      if (leaf.view.getViewType() !== 'canvas') {
+      if (view.getViewType() !== 'canvas') {
         this.teardownCanvas();
         return;
       }
 
-      const view = leaf.view as unknown as { canvas: ExtendedCanvas; file?: { path: string } };
       const canvas = view.canvas;
       if (!canvas) {
         this.scheduleRetry();
@@ -147,9 +150,8 @@ export class CanvasManager {
     if (nodes instanceof Map) {
       nodes.forEach(processNode);
     } else if (typeof nodes === 'object') {
-      const record = nodes as Record<string, ExtendedCanvasNode>;
-      for (const id of Object.keys(record)) {
-        processNode(record[id]);
+      for (const id of Object.keys(nodes)) {
+        processNode(nodes[id]);
       }
     }
   }
@@ -452,12 +454,12 @@ export class CanvasManager {
 
     for (const [t, _label] of this.cardTypeLabels) {
       const btn = this.doc.createElement('button');
-      btn.textContent = typeSymbols[t as CardType] || t;
+      btn.textContent = typeSymbols[t] || t;
       btn.title = _label;
       btn.dataset.cardType = t;
       btn.className = 'clickable-icon task-card-type-btn';
       btn.classList.toggle('is-active', t === data.cardType);
-      btn.addEventListener('click', () => void this.setCardType(nodeId, t as CardType));
+      btn.addEventListener('click', () => void this.setCardType(nodeId, t));
       typeGroup.appendChild(btn);
     }
 
@@ -479,7 +481,7 @@ export class CanvasManager {
       btn.dataset.priority = p;
       btn.className = 'clickable-icon task-card-prio-btn';
       btn.classList.toggle('is-active', p === data.priority);
-      btn.addEventListener('click', () => void this.setPriority(nodeId, p as Priority));
+      btn.addEventListener('click', () => void this.setPriority(nodeId, p));
       prioGroup.appendChild(btn);
     }
 
@@ -651,9 +653,8 @@ export class CanvasManager {
       return null;
     }
     if (typeof nodes === 'object') {
-      const record = nodes as Record<string, ExtendedCanvasNode>;
-      for (const id of Object.keys(record)) {
-        if (record[id]?.elementEl === nodeEl) return id;
+      for (const id of Object.keys(nodes)) {
+        if (nodes[id]?.elementEl === nodeEl) return id;
       }
     }
     return null;
@@ -790,13 +791,13 @@ export class CanvasManager {
       } catch (e: unknown) {
         console.warn('Canvas Task Cards: addNode threw', e instanceof Error ? e.message.slice(0, 100) : e);
         try {
-          const proto = Object.getPrototypeOf(canvas);
-          const unpatched = proto?.addNode;
+          const proto = Object.getPrototypeOf(canvas) as Record<string, unknown>;
+          const unpatched = proto.addNode;
           if (typeof unpatched === 'function' && unpatched !== canvas.addNode) {
-            node = unpatched.call(canvas, 'text', { x, y, width: 300, height: 200, text: '' });
+            node = unpatched.call(canvas, 'text', { x, y, width: 300, height: 200, text: '' }) as ExtendedCanvasNode | null;
           }
-        } catch (e2) {
-          console.warn('Canvas Task Cards: unpatched addNode also failed', e2.message?.slice(0, 100));
+        } catch (e2: unknown) {
+          console.warn('Canvas Task Cards: unpatched addNode also failed', e2 instanceof Error ? e2.message.slice(0, 100) : e2);
         }
       }
 
@@ -866,9 +867,8 @@ export class CanvasManager {
         }
       });
     } else if (typeof nodes === 'object') {
-      const record = nodes as Record<string, ExtendedCanvasNode>;
-      for (const id of Object.keys(record)) {
-        const n = record[id];
+      for (const id of Object.keys(nodes)) {
+        const n = nodes[id];
         if (n && Math.abs(n.x - x) < 2 && Math.abs(n.y - y) < 2) {
           matches.push(n);
         }
@@ -899,7 +899,7 @@ export class CanvasManager {
 
     // Fallback: position matching
     if (typeof node.x === 'number' && typeof node.y === 'number') {
-      const allNodes = (wrapper || document).querySelectorAll('.canvas-node');
+      const allNodes = (wrapper || this.doc).querySelectorAll('.canvas-node');
       for (let i = 0; i < allNodes.length; i++) {
         const nodeEl = allNodes[i] as HTMLElement;
         const pos = this.parseTransformPosition(nodeEl.style.transform);

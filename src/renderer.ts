@@ -28,7 +28,7 @@ export class TaskRenderer {
       indicator.addEventListener('click', (e: MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        this.plugin.canvasManager.handleCheckboxClick(nodeId);
+        void this.plugin.canvasManager.handleCheckboxClick(nodeId);
       });
 
       indicator.addEventListener('mousedown', (e: MouseEvent) => {
