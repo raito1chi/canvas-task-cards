@@ -1,4 +1,4 @@
-import { Notice, activeDocument, View } from 'obsidian';
+import { Notice, activeDocument } from 'obsidian';
 import type CanvasTaskCardsPlugin from './main';
 import type {
   CardType,
@@ -57,15 +57,17 @@ export class CanvasManager {
 
   private handleActiveLeaf(): void {
     try {
-      const view = this.plugin.app.workspace.getActiveViewOfType(View) as unknown as {
-        getViewType: () => string;
-        canvas?: ExtendedCanvas;
-        file?: { path: string };
-      } | null;
-      if (!view) {
+      const activeLeaf = this.plugin.app.workspace.activeLeaf;
+      if (!activeLeaf?.view) {
         this.scheduleRetry();
         return;
       }
+
+      const view = activeLeaf.view as unknown as {
+        getViewType: () => string;
+        canvas?: ExtendedCanvas;
+        file?: { path: string };
+      };
 
       if (typeof view.getViewType !== 'function') {
         this.scheduleRetry();
@@ -358,7 +360,7 @@ export class CanvasManager {
   private setupEmptySpaceMenu(): void {
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      const nodeEl = target.closest('.canvas-node') as HTMLElement | null;
+      const nodeEl = target.closest<HTMLElement>('.canvas-node');
       if (nodeEl) return;
 
       window.setTimeout(() => {
@@ -592,7 +594,7 @@ export class CanvasManager {
       // Don't hide when clicking inside the toolbar
       if (target.closest('.task-toolbar')) return;
 
-      const nodeEl = target.closest('.canvas-node') as HTMLElement | null;
+      const nodeEl = target.closest<HTMLElement>('.canvas-node');
       if (nodeEl) {
         let nodeId: string | null = nodeEl.dataset?.id ?? null;
         if (!nodeId) nodeId = this.findNodeIdByElement(nodeEl);
@@ -887,13 +889,13 @@ export class CanvasManager {
     if (!node?.id) return null;
 
     // Try data-id query
-    let el = this.doc.querySelector(`.canvas-node[data-id="${node.id}"]`) as HTMLElement | null;
+    let el = this.doc.querySelector<HTMLElement>(`.canvas-node[data-id="${node.id}"]`);
     if (el) return el;
 
     // Try within wrapper
     const wrapper = this.getCanvasWrapper();
     if (wrapper) {
-      el = wrapper.querySelector(`.canvas-node[data-id="${node.id}"]`) as HTMLElement | null;
+      el = wrapper.querySelector<HTMLElement>(`.canvas-node[data-id="${node.id}"]`);
       if (el) return el;
     }
 
@@ -918,7 +920,8 @@ export class CanvasManager {
     if (nodes instanceof Map) {
       return [...nodes.values()];
     }
-    return Object.values(nodes) as ExtendedCanvasNode[];
+    const record = nodes as Record<string, ExtendedCanvasNode>;
+    return Object.values(record);
   }
 
   private parseTransformPosition(transform: string): { x: number; y: number } | null {
