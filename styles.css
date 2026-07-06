@@ -134,8 +134,8 @@
 }
 
 /* ── Completed card visual ── */
-.canvas-node.is-completed .canvas-node-container {
-  border-color: var(--task-completed-border-color) !important;
+.canvas-node.is-completed.canvas-node .canvas-node-container {
+  border-color: var(--task-completed-border-color);
   opacity: var(--task-completed-opacity);
 }
 
@@ -148,33 +148,33 @@
 }
 
 /* ── Type-based border color for completed cards ── */
-.canvas-node.is-completed[data-card-type='question'] .canvas-node-container {
-  border-color: var(--type-question-color) !important;
+.canvas-node.is-completed.canvas-node[data-card-type='question'] .canvas-node-container {
+  border-color: var(--type-question-color);
 }
-.canvas-node.is-completed[data-card-type='important'] .canvas-node-container {
-  border-color: var(--type-important-color) !important;
+.canvas-node.is-completed.canvas-node[data-card-type='important'] .canvas-node-container {
+  border-color: var(--type-important-color);
 }
-.canvas-node.is-completed[data-card-type='idea'] .canvas-node-container {
-  border-color: var(--type-idea-color) !important;
+.canvas-node.is-completed.canvas-node[data-card-type='idea'] .canvas-node-container {
+  border-color: var(--type-idea-color);
 }
-.canvas-node.is-completed[data-card-type='info'] .canvas-node-container {
-  border-color: var(--type-info-color) !important;
+.canvas-node.is-completed.canvas-node[data-card-type='info'] .canvas-node-container {
+  border-color: var(--type-info-color);
 }
 
 /* ── Hide indicator on non-task cards ── */
-.canvas-node:not(.is-task-card) .task-indicator {
-  display: none !important;
+.canvas-node:not(.is-task-card).canvas-node .task-indicator {
+  display: none;
 }
 
 /* ── Overflow for indicators hanging outside the card ── */
-.canvas-node.is-task-card {
-  overflow: visible !important;
+.canvas-node.is-task-card.canvas-node {
+  overflow: visible;
 }
 
-.canvas-node.is-task-card .canvas-node-connection-point,
-.canvas-node.is-task-card .canvas-node-resizer {
-  pointer-events: none !important;
-  opacity: 0 !important;
+.canvas-node.is-task-card.canvas-node .canvas-node-connection-point,
+.canvas-node.is-task-card.canvas-node .canvas-node-resizer {
+  pointer-events: none;
+  opacity: 0;
 }
 
 .canvas-node.is-task-card .canvas-node-container {
@@ -182,15 +182,15 @@
 }
 
 /* ── Filter: dim non-matching cards ── */
-.canvas-node.filtered-out {
-  opacity: 0.12 !important;
-  pointer-events: none !important;
+.canvas-node.filtered-out.canvas-node {
+  opacity: 0.12;
+  pointer-events: none;
 }
-.canvas-node.filtered-out .canvas-node-container {
-  opacity: 0.12 !important;
+.canvas-node.filtered-out.canvas-node .canvas-node-container {
+  opacity: 0.12;
 }
-.canvas-node.filtered-out .task-indicator {
-  pointer-events: none !important;
+.canvas-node.filtered-out.canvas-node .task-indicator {
+  pointer-events: none;
 }
 
 /* ── Reduced motion ── */
@@ -198,13 +198,32 @@
   .task-indicator,
   .task-symbol,
   .task-priority-dot,
-  .canvas-node.is-completed .canvas-node-container {
-    transition: none !important;
+  .canvas-node.is-completed.canvas-node .canvas-node-container {
+    transition: none;
   }
 }
 
 /* ── Top toolbar (card type, priority, toggle) ── */
+.task-card-popup-controls-group {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  margin: 4px 8px 2px 8px;
+}
+
+.task-card-popup-controls-group + .task-card-popup-controls-group {
+  margin: 0 8px 4px 8px;
+}
+
+.task-card-popup-controls-label {
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 4px;
+  color: var(--text-muted);
+}
+
 .task-toolbar {
+  display: none;
   position: fixed;
   top: 8px;
   left: 50%;
@@ -219,6 +238,10 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   font-size: 13px;
   pointer-events: auto;
+}
+
+.task-toolbar.is-visible {
+  display: flex;
 }
 
 .task-toolbar-group {
@@ -278,16 +301,16 @@
 }
 
 .task-card-popup-controls button.clickable-icon:hover {
-  background: var(--background-modifier-hover) !important;
+  background: var(--background-modifier-hover);
 }
 
 .task-card-popup-controls button.clickable-icon.is-active {
-  background: var(--interactive-accent) !important;
-  color: var(--text-on-accent) !important;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
 }
 
-.task-card-prio-btn {
-  font-size: 10px !important;
-  font-weight: 600 !important;
-  width: 28px !important;
+.task-card-popup-controls .task-card-prio-btn {
+  font-size: 10px;
+  font-weight: 600;
+  width: 28px;
 }

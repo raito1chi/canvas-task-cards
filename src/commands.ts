@@ -9,7 +9,7 @@ export function registerCommands(plugin: CanvasTaskCardsPlugin): void {
       if (!plugin.canvasManager?.activeCanvas) return false;
       if (checking) return true;
       for (const node of plugin.canvasManager.getSelectedNodes()) {
-        plugin.canvasManager.convertToTask(node.id);
+        void plugin.canvasManager.convertToTask(node.id);
       }
     },
   });
@@ -21,7 +21,7 @@ export function registerCommands(plugin: CanvasTaskCardsPlugin): void {
       if (!plugin.canvasManager?.activeCanvas) return false;
       if (checking) return true;
       for (const node of plugin.canvasManager.getSelectedNodes()) {
-        plugin.canvasManager.convertToNormal(node.id);
+        void plugin.canvasManager.convertToNormal(node.id);
       }
     },
   });
@@ -33,7 +33,7 @@ export function registerCommands(plugin: CanvasTaskCardsPlugin): void {
       if (!plugin.canvasManager?.activeCanvas) return false;
       if (checking) return true;
       for (const node of plugin.canvasManager.getSelectedNodes()) {
-        plugin.canvasManager.toggleTask(node.id);
+        void plugin.canvasManager.toggleTask(node.id);
       }
     },
   });
@@ -45,7 +45,7 @@ export function registerCommands(plugin: CanvasTaskCardsPlugin): void {
       if (!plugin.canvasManager?.activeCanvas) return false;
       if (checking) return true;
       for (const node of plugin.canvasManager.getSelectedNodes()) {
-        plugin.canvasManager.markCompleted(node.id);
+        void plugin.canvasManager.markCompleted(node.id);
       }
     },
   });
@@ -57,7 +57,7 @@ export function registerCommands(plugin: CanvasTaskCardsPlugin): void {
       if (!plugin.canvasManager?.activeCanvas) return false;
       if (checking) return true;
       for (const node of plugin.canvasManager.getSelectedNodes()) {
-        plugin.canvasManager.markTodo(node.id);
+        void plugin.canvasManager.markTodo(node.id);
       }
     },
   });
@@ -90,7 +90,7 @@ export function registerCommands(plugin: CanvasTaskCardsPlugin): void {
         if (!plugin.canvasManager?.activeCanvas) return false;
         if (checking) return true;
         for (const node of plugin.canvasManager.getSelectedNodes()) {
-          plugin.canvasManager.setCardType(node.id, type);
+          void plugin.canvasManager.setCardType(node.id, type);
         }
       },
     });
@@ -113,7 +113,7 @@ export function registerCommands(plugin: CanvasTaskCardsPlugin): void {
         if (!plugin.canvasManager?.activeCanvas) return false;
         if (checking) return true;
         for (const node of plugin.canvasManager.getSelectedNodes()) {
-          plugin.canvasManager.setPriority(node.id, prio);
+          void plugin.canvasManager.setPriority(node.id, prio);
         }
       },
     });
