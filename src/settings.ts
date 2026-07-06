@@ -13,7 +13,7 @@ export class SettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    new Setting(containerEl).setName('Canvas Task Cards Settings').setHeading();
+    new Setting(containerEl).setName('General').setHeading();
 
     const doc = activeDocument ?? document;
     const root = doc.documentElement;
@@ -37,7 +37,6 @@ export class SettingsTab extends PluginSettingTab {
       .addSlider(slider => slider
         .setLimits(0.1, 1, 0.05)
         .setValue(this.plugin.settings.completedOpacity)
-        .setDynamicTooltip()
         .onChange(async value => {
           this.plugin.settings.completedOpacity = value;
           root.style.setProperty('--task-completed-opacity', String(value));
@@ -50,7 +49,6 @@ export class SettingsTab extends PluginSettingTab {
       .addSlider(slider => slider
         .setLimits(12, 28, 1)
         .setValue(this.plugin.settings.checkboxSize)
-        .setDynamicTooltip()
         .onChange(async value => {
           this.plugin.settings.checkboxSize = value;
           root.style.setProperty('--task-indicator-size', `${value}px`);
@@ -63,7 +61,6 @@ export class SettingsTab extends PluginSettingTab {
       .addSlider(slider => slider
         .setLimits(-30, 0, 1)
         .setValue(this.plugin.settings.checkboxOffset)
-        .setDynamicTooltip()
         .onChange(async value => {
           this.plugin.settings.checkboxOffset = value;
           root.style.setProperty('--task-indicator-offset', `${value}px`);
