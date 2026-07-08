@@ -13,7 +13,7 @@ export class SettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    new Setting(containerEl).setName('Appearance').setHeading();
+    new Setting(containerEl).setName('Canvas Task Cards Settings').setHeading();
 
     const doc = activeDocument ?? document;
     const root = doc.documentElement;

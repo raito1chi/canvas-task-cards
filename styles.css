@@ -203,23 +203,54 @@
   }
 }
 
-/* ── Top toolbar (card type, priority, toggle) ── */
-.task-card-popup-controls-group {
-  display: inline-flex;
-  gap: 2px;
+/* ── Popup menu controls (Advanced Canvas style) ── */
+.task-card-type-btn,
+.task-card-prio-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
   align-items: center;
-  margin: 4px 8px 2px 8px;
+  justify-content: center;
 }
 
-.task-card-popup-controls-group + .task-card-popup-controls-group {
-  margin: 0 8px 4px 8px;
+.task-card-type-btn svg,
+.task-card-prio-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
-.task-card-popup-controls-label {
-  font-size: 11px;
-  font-weight: 600;
-  margin-right: 4px;
-  color: var(--text-muted);
+.task-card-type-btn.has-active-menu,
+.task-card-prio-btn.has-active-menu {
+  background: var(--background-modifier-hover);
+}
+
+/* ── Submenu (Advanced Canvas style) ── */
+.canvas-submenu {
+  position: absolute;
+  top: 100%;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+}
+
+.canvas-submenu .clickable-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-submenu .clickable-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .task-toolbar {
@@ -285,32 +316,5 @@
   font-weight: 600;
 }
 
-/* ── Popup toolbar controls (in card appearance area) ── */
-.task-card-popup-controls button.clickable-icon {
-  font-size: 12px;
-  width: 26px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  line-height: 24px;
-  text-align: center;
-  background: transparent;
-  transition: background 0.1s;
-}
 
-.task-card-popup-controls button.clickable-icon:hover {
-  background: var(--background-modifier-hover);
-}
 
-.task-card-popup-controls button.clickable-icon.is-active {
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
-}
-
-.task-card-popup-controls .task-card-prio-btn {
-  font-size: 10px;
-  font-weight: 600;
-  width: 28px;
-}
