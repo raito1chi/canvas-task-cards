@@ -13,9 +13,9 @@ export class SettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    new Setting(containerEl).setName('Canvas Task Cards Settings').setHeading();
+    new Setting(containerEl).setName('Appearance').setHeading();
 
-    const doc = activeDocument ?? document;
+    const doc = activeDocument;
     const root = doc.documentElement;
 
     new Setting(containerEl)

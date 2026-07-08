@@ -1,4 +1,4 @@
-import { Notice, activeDocument, setIcon, setTooltip } from 'obsidian';
+import { Notice, activeDocument, setIcon, setTooltip, View } from 'obsidian';
 import type CanvasTaskCardsPlugin from './main';
 import type {
   CardType,
@@ -23,7 +23,7 @@ export class CanvasManager {
   private selectedTaskNodeId: string | null = null;
 
   private get doc(): Document {
-    return activeDocument ?? document;
+    return activeDocument;
   }
 
   private getNodeFromCanvas(canvas: ExtendedCanvas | null, nodeId: string): ExtendedCanvasNode | null {
@@ -32,7 +32,7 @@ export class CanvasManager {
     if (nodes instanceof Map) {
       return nodes.get(nodeId) ?? null;
     }
-    return (nodes as Record<string, ExtendedCanvasNode>)[nodeId] ?? null;
+    return nodes[nodeId] ?? null;
   }
 
   constructor(plugin: CanvasTaskCardsPlugin) {
@@ -57,35 +57,27 @@ export class CanvasManager {
 
   private handleActiveLeaf(): void {
     try {
-      const activeLeaf = this.plugin.app.workspace.activeLeaf;
-      if (!activeLeaf?.view) {
+      const view = this.plugin.app.workspace.getActiveViewOfType(View);
+      if (!view) {
         this.scheduleRetry();
         return;
       }
-
-      const view = activeLeaf.view as unknown as {
-        getViewType: () => string;
-        canvas?: ExtendedCanvas;
-        file?: { path: string };
-      };
-
-      if (typeof view.getViewType !== 'function') {
-        this.scheduleRetry();
-        return;
-      }
-
       if (view.getViewType() !== 'canvas') {
         this.teardownCanvas();
         return;
       }
 
-      const canvas = view.canvas;
+      const canvasView = view as unknown as {
+        canvas?: ExtendedCanvas;
+        file?: { path: string };
+      };
+      const canvas = canvasView.canvas;
       if (!canvas) {
         this.scheduleRetry();
         return;
       }
 
-      const filePath = view.file?.path ?? '';
+      const filePath = canvasView.file?.path ?? '';
       if (canvas !== this.activeCanvas) {
         this.setupCanvas(canvas, filePath);
       }
@@ -152,9 +144,8 @@ export class CanvasManager {
     if (nodes instanceof Map) {
       nodes.forEach(processNode);
     } else if (typeof nodes === 'object') {
-      const record = nodes as Record<string, ExtendedCanvasNode>;
-      for (const id of Object.keys(record)) {
-        processNode(record[id]);
+      for (const id of Object.keys(nodes)) {
+        processNode(nodes[id]);
       }
     }
   }
@@ -457,14 +448,14 @@ export class CanvasManager {
     const typeOptions = this.cardTypeLabels.map(([t, label]) => ({
       label,
       icon: typeIcons[t],
-      callback: () => void this.setCardType(nodeId, t as CardType),
+      callback: () => void this.setCardType(nodeId, t),
     }));
 
     // ── Build priority submenu options ──
     const priorityOptions = this.priorityLabels.map(([p, label]) => ({
       label,
       icon: priorityIcons[p],
-      callback: () => void this.setPriority(nodeId, p as Priority),
+      callback: () => void this.setPriority(nodeId, p),
     }));
 
     // ── Create Type button (expandable) ──
@@ -680,9 +671,8 @@ export class CanvasManager {
       return null;
     }
     if (typeof nodes === 'object') {
-      const record = nodes as Record<string, ExtendedCanvasNode>;
-      for (const id of Object.keys(record)) {
-        if (record[id]?.elementEl === nodeEl) return id;
+      for (const id of Object.keys(nodes)) {
+        if (nodes[id]?.elementEl === nodeEl) return id;
       }
     }
     return null;
@@ -895,9 +885,8 @@ export class CanvasManager {
         }
       });
     } else if (typeof nodes === 'object') {
-      const record = nodes as Record<string, ExtendedCanvasNode>;
-      for (const id of Object.keys(record)) {
-        const n = record[id];
+      for (const id of Object.keys(nodes)) {
+        const n = nodes[id];
         if (n && Math.abs(n.x - x) < 2 && Math.abs(n.y - y) < 2) {
           matches.push(n);
         }
@@ -947,8 +936,7 @@ export class CanvasManager {
     if (nodes instanceof Map) {
       return [...nodes.values()];
     }
-    const record = nodes as Record<string, ExtendedCanvasNode>;
-    return Object.values(record);
+    return Object.values(nodes);
   }
 
   private parseTransformPosition(transform: string): { x: number; y: number } | null {
