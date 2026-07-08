@@ -1,4 +1,4 @@
-import { Notice, activeDocument } from 'obsidian';
+import { Notice, activeDocument, setIcon, setTooltip } from 'obsidian';
 import type CanvasTaskCardsPlugin from './main';
 import type {
   CardType,
@@ -424,74 +424,98 @@ export class CanvasManager {
     const menuEl = menu.menuEl;
     if (!menuEl) return;
 
-    // Remove old injected controls so we start fresh each render
-    menuEl.querySelectorAll('.task-card-popup-controls').forEach((el: Element) => el.remove());
+    // Remove old injected controls
+    menuEl.querySelectorAll('.task-card-popup-controls, .task-card-type-btn, .task-card-prio-btn, .canvas-submenu').forEach((el: Element) => el.remove());
 
-    // Find the currently selected node (single selection)
     const nodeId = this.getSelectedNodeId();
     if (!nodeId) return;
 
     const data = this.plugin.storage.get(this.currentCanvasPath, nodeId);
     if (!data?.taskCard) return;
 
-    // ── Row 1: Card Type buttons ──
-    const typeRow = this.doc.createElement('div');
-    typeRow.className = 'task-card-popup-controls';
-
-    const typeGroup = this.doc.createElement('span');
-    typeGroup.className = 'task-card-popup-controls-group';
-
-    const typeLabel = this.doc.createElement('span');
-    typeLabel.textContent = 'Type:';
-    typeLabel.className = 'task-card-popup-controls-label';
-    typeGroup.appendChild(typeLabel);
-
-    const typeSymbols: Record<CardType, string> = {
-      task: '☐', question: '?', important: '!', idea: '💡', info: 'ℹ',
+    const typeIcons: Record<CardType, string> = {
+      task: 'checkbox-glyph',
+      question: 'help',
+      important: 'alert-triangle',
+      idea: 'lightbulb',
+      info: 'info',
     };
 
-    for (const [t, _label] of this.cardTypeLabels) {
-      const btn = this.doc.createElement('button');
-      btn.textContent = typeSymbols[t as CardType] || t;
-      btn.title = _label;
-      btn.dataset.cardType = t;
-      btn.className = 'clickable-icon task-card-type-btn';
-      btn.classList.toggle('is-active', t === data.cardType);
-      btn.addEventListener('click', () => void this.setCardType(nodeId, t as CardType));
-      typeGroup.appendChild(btn);
-    }
+    const priorityIcons: Record<Priority, string> = {
+      none: 'minus',
+      low: 'arrow-down',
+      medium: 'equal',
+      high: 'arrow-up',
+    };
 
-    typeRow.appendChild(typeGroup);
+    // ── Build type submenu options ──
+    const typeOptions = this.cardTypeLabels.map(([t, label]) => ({
+      label,
+      icon: typeIcons[t],
+      callback: () => void this.setCardType(nodeId, t as CardType),
+    }));
 
-    // ── Row 2: Priority buttons ──
-    const prioGroup = this.doc.createElement('span');
-    prioGroup.className = 'task-card-popup-controls-group';
+    // ── Build priority submenu options ──
+    const priorityOptions = this.priorityLabels.map(([p, label]) => ({
+      label,
+      icon: priorityIcons[p],
+      callback: () => void this.setPriority(nodeId, p as Priority),
+    }));
 
-    const prioLabel = this.doc.createElement('span');
-    prioLabel.textContent = 'Priority:';
-    prioLabel.className = 'task-card-popup-controls-label';
-    prioGroup.appendChild(prioLabel);
+    // ── Create Type button (expandable) ──
+    const typeBtn = this.doc.createElement('button');
+    typeBtn.className = 'clickable-icon task-card-type-btn';
+    setIcon(typeBtn, typeIcons[data.cardType]);
+    setTooltip(typeBtn, `Type: ${this.cardTypeLabels.find(([t]) => t === data.cardType)?.[1] ?? data.cardType}`, { placement: 'top' });
+    this.setupExpandableButton(typeBtn, menuEl, typeOptions);
+    menuEl.insertBefore(typeBtn, menuEl.firstChild);
 
-    for (const [p, label] of this.priorityLabels) {
-      const btn = this.doc.createElement('button');
-      btn.textContent = label === 'None' ? '–' : label === 'Low' ? '▼' : label === 'Medium' ? '◆' : '▲';
-      btn.title = label;
-      btn.dataset.priority = p;
-      btn.className = 'clickable-icon task-card-prio-btn';
-      btn.classList.toggle('is-active', p === data.priority);
-      btn.addEventListener('click', () => void this.setPriority(nodeId, p as Priority));
-      prioGroup.appendChild(btn);
-    }
+    // ── Create Priority button (expandable) ──
+    const prioBtn = this.doc.createElement('button');
+    prioBtn.className = 'clickable-icon task-card-prio-btn';
+    setIcon(prioBtn, priorityIcons[data.priority]);
+    setTooltip(prioBtn, `Priority: ${this.priorityLabels.find(([p]) => p === data.priority)?.[1] ?? data.priority}`, { placement: 'top' });
+    this.setupExpandableButton(prioBtn, menuEl, priorityOptions);
+    menuEl.insertBefore(prioBtn, menuEl.firstChild);
+  }
 
-    typeRow.appendChild(prioGroup);
+  private setupExpandableButton(btn: HTMLElement, parentEl: HTMLElement, options: Array<{ label: string; icon: string; callback: () => void }>): void {
+    btn.addEventListener('click', () => {
+      const existingSubmenu = parentEl.querySelector('.canvas-submenu');
+      if (existingSubmenu) {
+        existingSubmenu.remove();
+        btn.classList.remove('has-active-menu');
+        return;
+      }
 
-    // ── Insert after the first separator or at the end ──
-    const firstSep = menuEl.querySelector('.menu-separator');
-    if (firstSep) {
-      menuEl.insertBefore(typeRow, firstSep.nextSibling);
-    } else {
-      menuEl.appendChild(typeRow);
-    }
+      // Close any other open submenus
+      parentEl.querySelectorAll('.canvas-submenu').forEach(el => el.remove());
+      parentEl.querySelectorAll('.has-active-menu').forEach(el => el.classList.remove('has-active-menu'));
+
+      btn.classList.add('has-active-menu');
+
+      const submenu = this.doc.createElement('div');
+      submenu.className = 'canvas-submenu';
+
+      for (const opt of options) {
+        const optBtn = this.doc.createElement('button');
+        optBtn.className = 'clickable-icon';
+        setIcon(optBtn, opt.icon);
+        setTooltip(optBtn, opt.label, { placement: 'top' });
+        optBtn.addEventListener('click', (e: MouseEvent) => {
+          e.stopPropagation();
+          opt.callback();
+          submenu.remove();
+          btn.classList.remove('has-active-menu');
+          // Update the button icon to reflect new selection
+          setIcon(btn, opt.icon);
+          setTooltip(btn, opt.label, { placement: 'top' });
+        });
+        submenu.appendChild(optBtn);
+      }
+
+      parentEl.appendChild(submenu);
+    });
   }
 
   private getSelectedNodeId(): string | null {
