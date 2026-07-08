@@ -53,7 +53,7 @@ export default class CanvasTaskCardsPlugin extends Plugin {
   }
 
   private applySettingsToCSS(): void {
-    const root = activeDocument.documentElement;
+    const root = (activeDocument ?? document).documentElement;
     root.style.setProperty('--task-completed-color', this.settings.completedBorderColor);
     root.style.setProperty('--task-completed-border-color', this.settings.completedBorderColor);
     root.style.setProperty('--task-completed-opacity', String(this.settings.completedOpacity));
