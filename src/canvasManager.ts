@@ -1,4 +1,4 @@
-import { Notice, activeDocument, setIcon, setTooltip, View } from 'obsidian';
+import { Notice, activeDocument, setIcon, setTooltip } from 'obsidian';
 import type CanvasTaskCardsPlugin from './main';
 import type {
   CardType,
@@ -23,7 +23,7 @@ export class CanvasManager {
   private selectedTaskNodeId: string | null = null;
 
   private get doc(): Document {
-    return activeDocument;
+    return activeDocument ?? document;
   }
 
   private getNodeFromCanvas(canvas: ExtendedCanvas | null, nodeId: string): ExtendedCanvasNode | null {
@@ -57,27 +57,35 @@ export class CanvasManager {
 
   private handleActiveLeaf(): void {
     try {
-      const view = this.plugin.app.workspace.getActiveViewOfType(View);
-      if (!view) {
+      const activeLeaf = this.plugin.app.workspace.activeLeaf;
+      if (!activeLeaf?.view) {
         this.scheduleRetry();
         return;
       }
+
+      const view = activeLeaf.view as unknown as {
+        getViewType: () => string;
+        canvas?: ExtendedCanvas;
+        file?: { path: string };
+      };
+
+      if (typeof view.getViewType !== 'function') {
+        this.scheduleRetry();
+        return;
+      }
+
       if (view.getViewType() !== 'canvas') {
         this.teardownCanvas();
         return;
       }
 
-      const canvasView = view as unknown as {
-        canvas?: ExtendedCanvas;
-        file?: { path: string };
-      };
-      const canvas = canvasView.canvas;
+      const canvas = view.canvas;
       if (!canvas) {
         this.scheduleRetry();
         return;
       }
 
-      const filePath = canvasView.file?.path ?? '';
+      const filePath = view.file?.path ?? '';
       if (canvas !== this.activeCanvas) {
         this.setupCanvas(canvas, filePath);
       }

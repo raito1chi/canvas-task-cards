@@ -15,7 +15,7 @@ export class SettingsTab extends PluginSettingTab {
 
     new Setting(containerEl).setName('Appearance').setHeading();
 
-    const doc = activeDocument;
+    const doc = activeDocument ?? document;
     const root = doc.documentElement;
 
     new Setting(containerEl)
