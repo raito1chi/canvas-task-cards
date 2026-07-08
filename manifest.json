@@ -1,7 +1,7 @@
 {
   "id": "canvas-task-cards",
   "name": "Canvas Task Cards",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minAppVersion": "1.5.0",
   "description": "Add task cards with completion states to Canvas.",
   "author": "raito1chi",
