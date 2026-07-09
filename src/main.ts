@@ -68,6 +68,9 @@ export default class CanvasTaskCardsPlugin extends Plugin {
     root.style.setProperty('--type-idea-color', this.settings.typeIdeaColor);
     root.style.setProperty('--type-info-color', this.settings.typeInfoColor);
 
+    root.style.setProperty('--task-progress-height', `${this.settings.progressBarHeight}px`);
+    root.style.setProperty('--task-progress-color', this.settings.progressBarColor);
+
     if (this.settings.enableAnimations) {
       root.classList.add('task-card-animations');
     } else {

@@ -78,6 +78,42 @@ export class SettingsTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
+    new Setting(containerEl).setName('Progress Bar').setHeading();
+
+    new Setting(containerEl)
+      .setName('Bar height')
+      .setDesc('Height of the progress bar in pixels')
+      .addSlider(slider => slider
+        .setLimits(2, 12, 1)
+        .setValue(this.plugin.settings.progressBarHeight)
+        .onChange(async value => {
+          this.plugin.settings.progressBarHeight = value;
+          root.style.setProperty('--task-progress-height', `${value}px`);
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Bar color')
+      .setDesc('Color of the progress bar (only used when auto-color is off)')
+      .addText(text => text
+        .setPlaceholder('#4caf50')
+        .setValue(this.plugin.settings.progressBarColor)
+        .onChange(async value => {
+          this.plugin.settings.progressBarColor = value;
+          root.style.setProperty('--task-progress-color', value);
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Auto color by card type')
+      .setDesc('Match progress bar color to card type color')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.progressBarAutoColor)
+        .onChange(async value => {
+          this.plugin.settings.progressBarAutoColor = value;
+          await this.plugin.saveSettings();
+        }));
+
     new Setting(containerEl).setName('Priority Colors').setHeading();
 
     new Setting(containerEl)

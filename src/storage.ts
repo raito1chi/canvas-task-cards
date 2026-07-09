@@ -17,6 +17,8 @@ export class TaskStorage {
       completed: raw.completed ?? false,
       cardType: raw.cardType ?? 'task',
       priority: raw.priority ?? 'none',
+      progress: raw.progress ?? -1,
+      subtasks: raw.subtasks ?? [],
     };
   }
 
@@ -48,7 +50,7 @@ export class TaskStorage {
   toggle(canvasPath: string, nodeId: string): TaskCardData {
     const existing = this.get(canvasPath, nodeId);
     if (!existing || !existing.taskCard) {
-      const data: TaskCardData = { taskCard: true, completed: true, cardType: 'task', priority: 'none' };
+      const data: TaskCardData = { taskCard: true, completed: true, cardType: 'task', priority: 'none', progress: -1, subtasks: [] };
       this.set(canvasPath, nodeId, data);
       return data;
     }

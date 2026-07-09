@@ -121,6 +121,7 @@ export class CanvasManager {
       this.processExistingNodes();
       this.attachCanvasEvents();
       this.attachMutationObserver();
+      this.setupSaveHook();
       this.setupContextMenu();
       this.setupPopupMenu();
       this.setupToolbar();
@@ -186,57 +187,14 @@ export class CanvasManager {
 
   private attachMutationObserver(): void {
     const wrapper = this.getCanvasWrapper();
-    if (!wrapper) {
-      return;
-    }
+    if (!wrapper) return;
 
     this.mutationObserver = new MutationObserver((mutations) => {
-      for (let mi = 0; mi < mutations.length; mi++) {
-        const added = mutations[mi].addedNodes;
-        for (let i = 0; i < added.length; i++) {
-          const nodeEl = added[i] as HTMLElement;
-          if (!nodeEl.classList?.contains('canvas-node')) continue;
-
-          // Strategy 1: data-id attribute
-          const dataId = nodeEl.dataset?.id;
-          if (dataId) {
-            const node = this.getNodeFromCanvas(this.activeCanvas, dataId);
-            if (node) { this.renderNodeOnElement(nodeEl, node); continue; }
-          }
-
-          // Strategy 2: elementEl reference
-          if (this.activeCanvas?.nodes) {
-            const entries = this.getNodeEntries();
-            let matched = false;
-            for (const n of entries) {
-              if (n.elementEl === nodeEl) {
-                this.renderNodeOnElement(nodeEl, n);
-                matched = true;
-                break;
-              }
-            }
-            if (matched) continue;
-          }
-
-          // Strategy 3: position matching (parse transform style)
-          const pos = this.parseTransformPosition(nodeEl.style.transform);
-          if (pos && this.activeCanvas?.nodes) {
-            const entries = this.getNodeEntries();
-            for (const n of entries) {
-              if (typeof n.x === 'number' && typeof n.y === 'number' &&
-                  Math.abs(n.x - pos.x) < 5 && Math.abs(n.y - pos.y) < 5) {
-                this.renderNodeOnElement(nodeEl, n);
-                break;
-              }
-            }
-          }
-        }
-        const removed = mutations[mi].removedNodes;
-        for (let i = 0; i < removed.length; i++) {
-          const nodeEl = removed[i] as HTMLElement;
-          if (nodeEl.classList?.contains('canvas-node')) {
-            const checkbox = nodeEl.querySelector('.task-checkbox');
-            if (checkbox) checkbox.remove();
+      for (const mutation of mutations) {
+        for (let i = 0; i < mutation.addedNodes.length; i++) {
+          const el = mutation.addedNodes[i] as HTMLElement;
+          if (el.classList?.contains('canvas-node')) {
+            this.renderNewNode(el);
           }
         }
       }
@@ -253,10 +211,90 @@ export class CanvasManager {
     });
   }
 
+  private setupSaveHook(): void {
+    const canvas = this.activeCanvas;
+    if (!canvas || typeof canvas.requestSave !== 'function') return;
+    const orig = canvas.requestSave.bind(canvas);
+    const self = this;
+    canvas.requestSave = function(...args: unknown[]) {
+      const result = orig(...args);
+      self.syncAllTaskCards();
+      return result;
+    };
+    this.cleanupFns.push(() => {
+      canvas.requestSave = orig;
+    });
+  }
+
+  private syncAllTaskCards(): void {
+    const canvas = this.activeCanvas;
+    if (!canvas?.nodes) return;
+    const entries = this.getNodeEntries();
+    for (const node of entries) {
+      if (!node.id || !this.plugin.storage.has(this.currentCanvasPath, node.id)) continue;
+      const cardData = this.plugin.storage.get(this.currentCanvasPath, node.id);
+      if (!cardData?.taskCard || cardData.progress >= 0) continue;
+      const text = node.text || (node.getData ? (node.getData() as Record<string, unknown>).text as string : '') || '';
+      const cp = this.renderer.calcCheckboxProgressFromText(text);
+      if (cp < 0) continue;
+      const nodeEl = this.getNodeEl(node);
+      if (!nodeEl) continue;
+      this.applySync(nodeEl, node.id, cardData, cp);
+    }
+  }
+
+  private applySync(nodeEl: HTMLElement, nodeId: string, data: import('./types').TaskCardData, cp: number): void {
+    const container = nodeEl.querySelector('.canvas-node-container') as HTMLElement;
+    if (container) container.dataset.pbLastCp = String(cp);
+
+    if (cp === 100 && !data.completed) {
+      data.completed = true;
+      this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
+      void this.plugin.saveSettings();
+      this.renderer.update(nodeEl, data);
+    } else if (cp !== 100 && data.completed) {
+      data.completed = false;
+      this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
+      void this.plugin.saveSettings();
+      this.renderer.update(nodeEl, data);
+    } else {
+      const fill = container?.querySelector('.task-progress-fill') as HTMLElement;
+      if (fill) fill.style.height = `${cp}%`;
+    }
+  }
+
   private getCanvasWrapper(): HTMLElement | null {
     const canvas = this.activeCanvas;
     if (!canvas) return null;
     return canvas.wrapperEl || canvas.nodeEl || canvas.containerEl || null;
+  }
+
+  private renderNewNode(nodeEl: HTMLElement): void {
+    const dataId = nodeEl.dataset?.id;
+    if (dataId) {
+      const node = this.getNodeFromCanvas(this.activeCanvas, dataId);
+      if (node) { this.renderNodeOnElement(nodeEl, node); return; }
+    }
+    if (this.activeCanvas?.nodes) {
+      const entries = this.getNodeEntries();
+      for (const n of entries) {
+        if (n.elementEl === nodeEl) {
+          this.renderNodeOnElement(nodeEl, n);
+          return;
+        }
+      }
+    }
+    const pos = this.parseTransformPosition(nodeEl.style.transform);
+    if (pos && this.activeCanvas?.nodes) {
+      const entries = this.getNodeEntries();
+      for (const n of entries) {
+        if (typeof n.x === 'number' && typeof n.y === 'number' &&
+            Math.abs(n.x - pos.x) < 5 && Math.abs(n.y - pos.y) < 5) {
+          this.renderNodeOnElement(nodeEl, n);
+          return;
+        }
+      }
+    }
   }
 
   private setupContextMenu(): void {
@@ -860,6 +898,8 @@ export class CanvasManager {
       completed: false,
       cardType: 'task',
       priority: 'none',
+      progress: -1,
+      subtasks: [],
     });
     void this.plugin.saveSettings();
 
@@ -1013,12 +1053,28 @@ export class CanvasManager {
     const nodeEl = this.getNodeEl(node);
     if (!nodeEl) return;
 
-    const data = this.plugin.storage.toggle(
-      this.currentCanvasPath,
-      nodeId,
-    );
+    const data = this.plugin.storage.toggle(this.currentCanvasPath, nodeId);
+    this.setAllCardCheckboxes(nodeId, data.completed);
     await this.plugin.saveSettings();
     this.renderer.update(nodeEl, data);
+  }
+
+  private setAllCardCheckboxes(nodeId: string, checked: boolean): void {
+    const canvas = this.activeCanvas;
+    if (!canvas) return;
+    const node = this.resolveNode(nodeId);
+    if (!node || typeof node.getData !== 'function' || typeof node.setData !== 'function') return;
+    try {
+      const nd = node.getData() as { text?: string };
+      const text = nd.text || '';
+      const newText = text.replace(/- \[[ xX]?\]/g, checked ? '- [x]' : '- [ ]');
+      if (newText === text) return;
+      nd.text = newText;
+      node.setData(nd);
+      canvas.requestSave();
+    } catch (e) {
+      console.error('Canvas Task Cards: setAllCardCheckboxes error', e);
+    }
   }
 
   async convertToTask(nodeId: string): Promise<void> {
@@ -1032,6 +1088,8 @@ export class CanvasManager {
       completed: false,
       cardType: 'task',
       priority: 'none',
+      progress: -1,
+      subtasks: [],
     };
     this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
     await this.plugin.saveSettings();
@@ -1060,12 +1118,14 @@ export class CanvasManager {
       nodeId,
     );
     if (!existing?.taskCard) {
-      const data: import('./types').TaskCardData = {
-        taskCard: true,
-        completed: true,
-        cardType: 'task',
-        priority: 'none',
-      };
+    const data: import('./types').TaskCardData = {
+      taskCard: true,
+      completed: false,
+      cardType: 'task',
+      priority: 'none',
+      progress: -1,
+      subtasks: [],
+    };
       this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
       await this.plugin.saveSettings();
       this.renderer.render(nodeEl, nodeId, data);
@@ -1085,11 +1145,14 @@ export class CanvasManager {
     const nodeEl = this.getNodeEl(node);
     if (!nodeEl) return;
 
+    const existing = this.plugin.storage.get(this.currentCanvasPath, nodeId);
     const data: import('./types').TaskCardData = {
       taskCard: true,
       completed: true,
-      cardType: 'task',
-      priority: 'none',
+      cardType: existing?.cardType ?? 'task',
+      priority: existing?.priority ?? 'none',
+      progress: existing?.progress ?? -1,
+      subtasks: existing?.subtasks ?? [],
     };
     this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
     await this.plugin.saveSettings();
@@ -1102,15 +1165,108 @@ export class CanvasManager {
     const nodeEl = this.getNodeEl(node);
     if (!nodeEl) return;
 
+    const existing = this.plugin.storage.get(this.currentCanvasPath, nodeId);
     const data: import('./types').TaskCardData = {
       taskCard: true,
       completed: false,
-      cardType: 'task',
-      priority: 'none',
+      cardType: existing?.cardType ?? 'task',
+      priority: existing?.priority ?? 'none',
+      progress: existing?.progress ?? -1,
+      subtasks: existing?.subtasks ?? [],
     };
     this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
     await this.plugin.saveSettings();
     this.renderer.render(nodeEl, nodeId, data);
+  }
+
+  async openSubtaskModal(nodeId: string): Promise<void> {
+    const node = this.resolveNode(nodeId);
+    if (!node) return;
+    const data = this.plugin.storage.get(this.currentCanvasPath, nodeId);
+    if (!data?.taskCard) return;
+    const modal = new (await import('./subtaskModal')).SubtaskEditModal(
+      this.plugin,
+      this.currentCanvasPath,
+      nodeId,
+      data,
+    );
+    modal.open();
+  }
+
+  refreshNodeRendering(nodeId: string): void {
+    const node = this.resolveNode(nodeId);
+    if (!node) return;
+    const nodeEl = this.getNodeEl(node);
+    if (!nodeEl) return;
+    const data = this.plugin.storage.get(this.currentCanvasPath, nodeId);
+    if (!data?.taskCard) return;
+    this.renderer.render(nodeEl, nodeId, data);
+  }
+
+  updateNodeTextWithSubtasks(nodeId: string, subtasks: import('./types').Subtask[]): void {
+    const canvas = this.activeCanvas;
+    if (!canvas) return;
+    const node = this.resolveNode(nodeId);
+    if (!node) return;
+    if (typeof node.getData !== 'function' || typeof node.setData !== 'function') return;
+    try {
+      const nd = node.getData() as { text?: string };
+      const lines = (nd.text || '').split('\n');
+      const clean: string[] = [];
+      for (const line of lines) {
+        if (/^\s*- \[[ xX]?\]\s/.test(line)) continue;
+        clean.push(line);
+      }
+      for (const sub of subtasks) {
+        clean.push(`- [${sub.completed ? 'x' : ' '}] ${sub.text}`);
+      }
+      nd.text = clean.join('\n');
+      node.setData(nd);
+      canvas.requestSave();
+    } catch (e) {
+      console.error('Canvas Task Cards: updateNodeTextWithSubtasks error', e);
+    }
+  }
+
+  parseSubtasksFromCardText(nodeId: string): Array<{ text: string; completed: boolean }> {
+    const node = this.resolveNode(nodeId);
+    if (!node) return [];
+    const text = node.text || (node.getData ? (node.getData() as Record<string, unknown>).text as string : '') || '';
+    const results: Array<{ text: string; completed: boolean }> = [];
+    const regex = /^\s*- \[([ xX])\]\s+(.+)$/gm;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      results.push({ text: match[2].trim(), completed: match[1] !== ' ' });
+    }
+    return results;
+  }
+
+  syncTextCheckboxesWithState(nodeId: string, subtasks: import('./types').Subtask[]): void {
+    const canvas = this.activeCanvas;
+    if (!canvas) return;
+    const node = this.resolveNode(nodeId);
+    if (!node) return;
+    if (typeof node.getData !== 'function' || typeof node.setData !== 'function') return;
+    try {
+      const nd = node.getData() as { text?: string };
+      const lines = (nd.text || '').split('\n');
+      let subIdx = 0;
+      const newLines: string[] = [];
+      for (const line of lines) {
+        const m = line.match(/^(\s*)- \[[ xX]?\]\s+(.*)$/);
+        if (m && subIdx < subtasks.length) {
+          newLines.push(`${m[1]}- [${subtasks[subIdx].completed ? 'x' : ' '}] ${subtasks[subIdx].text}`);
+          subIdx++;
+        } else {
+          newLines.push(line);
+        }
+      }
+      nd.text = newLines.join('\n');
+      node.setData(nd);
+      canvas.requestSave();
+    } catch (e) {
+      console.error('Canvas Task Cards: syncTextCheckboxesWithState error', e);
+    }
   }
 
   getSelectedNodes(): ExtendedCanvasNode[] {

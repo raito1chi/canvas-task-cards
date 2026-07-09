@@ -72,6 +72,18 @@ export function registerCommands(plugin: CanvasTaskCardsPlugin): void {
     },
   });
 
+  plugin.addCommand({
+    id: 'edit-subtasks',
+    name: 'Edit subtasks',
+    callback: () => {
+      const cm = plugin.canvasManager;
+      if (!cm?.activeCanvas) return;
+      for (const node of cm.getSelectedNodes()) {
+        void cm.openSubtaskModal(node.id);
+      }
+    },
+  });
+
   // ── Card Type commands ──
 
   const cardTypes: Array<[CardType, string]> = [

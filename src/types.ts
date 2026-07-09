@@ -1,11 +1,19 @@
 export type CardType = 'task' | 'question' | 'important' | 'idea' | 'info';
 export type Priority = 'none' | 'low' | 'medium' | 'high';
 
+export interface Subtask {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
 export interface TaskCardData {
   taskCard: boolean;
   completed: boolean;
   cardType: CardType;
   priority: Priority;
+  progress: number;
+  subtasks: Subtask[];
 }
 
 export interface PluginSettings {
@@ -22,6 +30,9 @@ export interface PluginSettings {
   typeImportantColor: string;
   typeIdeaColor: string;
   typeInfoColor: string;
+  progressBarHeight: number;
+  progressBarColor: string;
+  progressBarAutoColor: boolean;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -38,6 +49,9 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   typeImportantColor: '#e53935',
   typeIdeaColor: '#fdd835',
   typeInfoColor: '#00acc1',
+  progressBarHeight: 4,
+  progressBarColor: '#4caf50',
+  progressBarAutoColor: true,
 };
 
 export interface PersistedPluginData {

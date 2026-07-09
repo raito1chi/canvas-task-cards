@@ -316,5 +316,226 @@
   font-weight: 600;
 }
 
+/* ── Progress bar (vertical, left edge) ── */
+.task-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--task-progress-height, 4px);
+  background: var(--background-modifier-border);
+  border-radius: 0 2px 2px 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.task-progress-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--task-progress-color, #4caf50);
+  transition: height 0.3s ease;
+  border-radius: 0 2px 0 0;
+}
+
+.canvas-node.is-task-card .canvas-node-container {
+  position: relative;
+}
+
+/* ── Card-type progress colors (only when auto-color is on) ── */
+.canvas-node[data-card-type='task'] .canvas-node-container[data-pb-autocolor='true'] .task-progress-fill {
+  background: var(--type-task-color);
+}
+
+.canvas-node[data-card-type='question'] .canvas-node-container[data-pb-autocolor='true'] .task-progress-fill {
+  background: var(--type-question-color);
+}
+
+.canvas-node[data-card-type='important'] .canvas-node-container[data-pb-autocolor='true'] .task-progress-fill {
+  background: var(--type-important-color);
+}
+
+.canvas-node[data-card-type='idea'] .canvas-node-container[data-pb-autocolor='true'] .task-progress-fill {
+  background: var(--type-idea-color);
+}
+
+.canvas-node[data-card-type='info'] .canvas-node-container[data-pb-autocolor='true'] .task-progress-fill {
+  background: var(--type-info-color);
+}
+
+/* ── Subtask modal ── */
+.task-subtask-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--text-normal);
+}
+
+.task-subtask-list {
+  margin-bottom: 12px;
+}
+
+.task-subtask-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.task-subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.task-subtask-checkbox {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.task-subtask-text {
+  flex: 1;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 14px;
+  background: transparent;
+  color: var(--text-normal);
+}
+
+.task-subtask-del {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  padding: 2px 6px;
+}
+
+.task-subtask-del:hover {
+  color: var(--text-accent);
+}
+
+.task-subtask-add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.task-subtask-add-input {
+  flex: 1;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 14px;
+  background: transparent;
+  color: var(--text-normal);
+}
+
+.task-subtask-add-btn {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.task-subtask-progress-section {
+  margin-bottom: 16px;
+}
+
+.task-subtask-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-normal);
+}
+
+.task-subtask-toggle-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.task-subtask-mode-btn {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-normal);
+}
+
+.task-subtask-mode-btn.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.task-subtask-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-subtask-slider {
+  flex: 1;
+}
+
+.task-subtask-slider-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  min-width: 40px;
+  text-align: right;
+}
+
+.task-subtask-auto-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--background-modifier-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.task-subtask-auto-fill {
+  height: 100%;
+  background: var(--interactive-accent);
+  border-radius: 4px;
+}
+
+.task-subtask-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.task-subtask-cancel-btn {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 6px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-normal);
+}
+
+.task-subtask-save-btn {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: 4px;
+  padding: 6px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
 
 
