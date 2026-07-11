@@ -27,7 +27,8 @@ An Obsidian plugin that turns Canvas cards into task cards with completion state
 
 Each task card has a small indicator on its left border containing a priority dot and a type symbol:
 
-<img width="1232" height="343" alt="Screenshot_20260701_124824" src="https://github.com/user-attachments/assets/2ad448a4-d61d-43ad-8563-41508fdebcae" />
+<img width="1395" height="392" alt="taskcardss" src="https://github.com/user-attachments/assets/31a7456f-9730-438a-bbd7-8199eecce92f" />
+
 
 ## Usage
 
