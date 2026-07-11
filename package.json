@@ -1,6 +1,6 @@
 {
   "name": "canvas-task-cards",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Add task cards to Obsidian Canvas",
   "main": "main.js",
   "scripts": {

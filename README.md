@@ -18,7 +18,9 @@ An Obsidian plugin that turns Canvas cards into task cards with completion state
 - **Right-click context menu** — "Mark Completed/Mark Todo", "Convert to Normal Card"
 - **Empty-space context menu** — "Add Task Card" when right-clicking empty canvas space
 - **Filter system** — filter cards by type or priority via Command Palette (e.g., "Only show: Important")
-- **Settings** — customize all colors (completed border, priority dots, card type accents), indicator size/offset, animations, and completed opacity
+- **Progress bar** — each task card can show a progress bar; subtasks are managed via the "Edit subtasks" command
+- **Auto-complete** — when all subtasks are checked, the task card auto-completes
+- **Settings** — customize progress bar height, color, and auto-color by card type; customize all colors (completed border, priority dots, card type accents), indicator size/offset, animations, and completed opacity
 - **Works alongside Advanced Canvas** — both plugins' controls coexist in the popup toolbar
 
 ## How it looks
@@ -59,6 +61,7 @@ Each task card has a small indicator on its left border containing a priority do
 | Set priority: None / Low / Medium / High | Changes the priority of selected cards |
 | [FILTER] Only show: Task / Question / Important / Idea / Info | Filters canvas by card type |
 | [FILTER] Only show: No priority / Low / Medium / High | Filters canvas by priority |
+| Edit subtasks | Opens a modal to manage subtasks for the selected card |
 | [FILTER] Clear filter | Removes active filter |
 
 ### Settings
