@@ -438,7 +438,10 @@ export class CanvasManager {
     // Method 1: Try workspace event (modern Obsidian)
     this.tryWorkspaceContextMenu();
 
-    // Method 2: Inject "Add Task Card" into empty-space menu
+    // Method 2: Native "Add Task Card" in the empty-space menu
+    this.tryEmptySpaceMenu();
+
+    // Method 3: DOM fallback (older Obsidian without the canvas:menu event)
     this.setupEmptySpaceMenu();
   }
 
@@ -483,6 +486,38 @@ export class CanvasManager {
       });
     } catch (e: unknown) {
       console.error('Canvas Task Cards: Error registering workspace event', e);
+    }
+  }
+
+  /**
+   * Adds a native "Add Task Card" entry to Obsidian's empty-space context
+   * menu via the `canvas:menu` workspace event (fires with `empty = true`).
+   * Native menu items render identically to Obsidian's own entries.
+   */
+  private tryEmptySpaceMenu(): void {
+    try {
+      const eventName = 'canvas:menu';
+      const handler = (menu: {
+        addItem: (cb: (item: { setTitle: (t: string) => void; setIcon: (i: string) => void; onClick: (fn: () => void) => void }) => void) => void;
+      }, _canvas: unknown, empty: boolean) => {
+        try {
+          if (!empty) return;
+          menu.addItem((item) => {
+            item.setTitle('Add Task Card');
+            item.setIcon('list-todo');
+            item.onClick(() => this.addNewTaskCard());
+          });
+        } catch (e: unknown) {
+          console.error('Canvas Task Cards: canvas:menu handler error', e);
+        }
+      };
+      const ws = this.plugin.app.workspace;
+      (ws as unknown as Record<string, (...args: unknown[]) => void>).on(eventName, handler);
+      this.cleanupFns.push(() => {
+        try { (ws as unknown as Record<string, (...args: unknown[]) => void>).off?.(eventName, handler); } catch { /* noop */ }
+      });
+    } catch (e: unknown) {
+      console.error('Canvas Task Cards: Error registering canvas:menu event', e);
     }
   }
 
@@ -553,6 +588,8 @@ export class CanvasManager {
 
     for (let mi = 0; mi < menus.length; mi++) {
       if (menus[mi].querySelector('.task-card-add-item')) return;
+      // Skip if the native canvas:menu handler already added the entry.
+      if (menus[mi].querySelector('.menu-item-title')?.textContent === 'Add Task Card') return;
     }
 
     const menuEl = menus[menus.length - 1] as HTMLElement;
@@ -565,6 +602,7 @@ export class CanvasManager {
     item.className = 'menu-item task-card-add-item';
     const iconSpan = this.doc.createElement('span');
     iconSpan.className = 'menu-item-icon';
+    setIcon(iconSpan, 'list-todo');
     item.appendChild(iconSpan);
     const titleSpan = this.doc.createElement('span');
     titleSpan.className = 'menu-item-title';
