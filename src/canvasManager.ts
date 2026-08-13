@@ -123,6 +123,7 @@ export class CanvasManager {
       this.setupSaveHook();
       this.migrateLegacyForPath(path);
       this.filterState = this.plugin.savedFilter ?? null;
+      this.patchAllNodesSetData();
       this.processExistingNodes();
       this.applyFilterToAll();
       this.attachCanvasEvents();
@@ -169,6 +170,7 @@ export class CanvasManager {
     if (!canvas || typeof canvas.on !== 'function') return;
 
     const onNodeAdded = (node: ExtendedCanvasNode) => {
+      this.patchNodeSetData(node);
       this.checkAndRender(node);
       if (this.filterState) this.applyFilterToNode(node);
     };
@@ -239,22 +241,67 @@ export class CanvasManager {
   }
 
   /**
-   * Writes/removes the embedded task-card field on each node's live data
-   * object so the next save serializes it into the `.canvas` file.
+   * Writes/removes the embedded task-card field on each node's data so the
+   * next save serializes it into the `.canvas` file. Must go through
+   * `node.setData()` (not raw mutation) — that is the only mechanism Obsidian
+   * reliably persists custom node fields (as used by Advanced Canvas).
    */
   private persistTaskDataToNodes(): void {
     const canvas = this.activeCanvas;
     if (!canvas?.nodes) return;
     for (const node of this.getNodeEntries()) {
       if (!node?.id) continue;
+      this.patchNodeSetData(node);
+      const cache = this.plugin.storage.get(this.currentCanvasPath, node.id);
       try {
         const d = node.getData?.();
         if (!d || typeof d !== 'object') continue;
-        if (this.plugin.storage.has(this.currentCanvasPath, node.id)) {
-          (d as Record<string, unknown>)[TASK_CARD_DATA_KEY] =
-            this.plugin.storage.get(this.currentCanvasPath, node.id);
+        const rec = d as Record<string, unknown>;
+        if (cache?.taskCard) {
+          if (JSON.stringify(rec[TASK_CARD_DATA_KEY]) !== JSON.stringify(cache)) {
+            node.setData({ ...rec });
+          }
+        } else if (rec[TASK_CARD_DATA_KEY] !== undefined) {
+          node.setData({ ...rec });
         }
       } catch { /* noop */ }
+    }
+  }
+
+  /**
+   * Wraps a node's `setData` so the latest task-card state from storage is
+   * merged into whatever Obsidian writes next. This keeps the embedded field
+   * alive across Obsidian's own setData calls (text edits, moves, resizes).
+   */
+  private patchNodeSetData(node: ExtendedCanvasNode): void {
+    if (!node || typeof node.setData !== 'function' || typeof node.getData !== 'function') return;
+    const rec = node as unknown as { __ctcSetDataPatched?: boolean };
+    if (rec.__ctcSetDataPatched) return;
+    rec.__ctcSetDataPatched = true;
+
+    const path = this.currentCanvasPath;
+    const id = node.id;
+    const origSetData = node.setData.bind(node);
+    const self = this;
+
+    node.setData = ((data: Record<string, unknown>) => {
+      const cache = self.plugin.storage.get(path, id);
+      if (cache?.taskCard) {
+        return origSetData({ ...data, [TASK_CARD_DATA_KEY]: cache });
+      }
+      if (data && data[TASK_CARD_DATA_KEY] !== undefined) {
+        const stripped = { ...data };
+        delete stripped[TASK_CARD_DATA_KEY];
+        return origSetData(stripped);
+      }
+      return origSetData(data);
+    }) as ExtendedCanvasNode['setData'];
+  }
+
+  private patchAllNodesSetData(): void {
+    if (!this.activeCanvas?.nodes) return;
+    for (const node of this.getNodeEntries()) {
+      if (node?.id) this.patchNodeSetData(node);
     }
   }
 
@@ -1092,6 +1139,7 @@ export class CanvasManager {
   private ensureTaskData(node: ExtendedCanvasNode): import('./types').TaskCardData | undefined {
     if (!node?.id) return undefined;
     if (this.plugin.storage.has(this.currentCanvasPath, node.id)) {
+      this.patchNodeSetData(node);
       return this.plugin.storage.get(this.currentCanvasPath, node.id);
     }
     try {
@@ -1099,6 +1147,7 @@ export class CanvasManager {
       const embedded = this.plugin.storage.readEmbedded(d);
       if (embedded?.taskCard) {
         this.plugin.storage.set(this.currentCanvasPath, node.id, embedded);
+        this.patchNodeSetData(node);
         return embedded;
       }
     } catch { /* noop */ }
@@ -1216,13 +1265,14 @@ export class CanvasManager {
     this.plugin.storage.remove(this.currentCanvasPath, nodeId);
     await this.plugin.saveSettings();
     this.renderer.remove(nodeEl);
-    // Strip the embedded field so it doesn't persist in the canvas file.
-    try {
-      const d = node.getData?.() as Record<string, unknown> | undefined;
-      if (d && d[TASK_CARD_DATA_KEY] !== undefined) {
-        delete d[TASK_CARD_DATA_KEY];
-      }
-    } catch { /* noop */ }
+    // Remove the embedded field from the node's data. The patched setData
+    // strips it (storage no longer has an entry); flush persists the change.
+    const nodeData = node.getData?.() as Record<string, unknown> | undefined;
+    if (nodeData && nodeData[TASK_CARD_DATA_KEY] !== undefined) {
+      const clean = { ...nodeData };
+      delete clean[TASK_CARD_DATA_KEY];
+      node.setData(clean);
+    }
     this.flushTaskData();
   }
 
