@@ -213,5 +213,18 @@ export class SettingsTab extends PluginSettingTab {
           root.style.setProperty('--type-info-color', value);
           await this.plugin.saveSettings();
         }));
+
+    new Setting(containerEl).setName('Stats').setHeading();
+
+    new Setting(containerEl)
+      .setName('Status bar stats')
+      .setDesc('Show a live task summary (completed/total + %) in the status bar. Click it to open the full stats panel.')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.showStatusBarStats)
+        .onChange(async value => {
+          this.plugin.settings.showStatusBarStats = value;
+          await this.plugin.saveSettings();
+          this.plugin.applyStatusBarToggle(value);
+        }));
   }
 }

@@ -6,6 +6,7 @@ import type {
   ExtendedCanvas,
   ExtendedCanvasNode,
   FilterState,
+  TaskCardData,
 } from './types';
 import { TaskRenderer } from './renderer';
 import { TASK_CARD_DATA_KEY } from './storage';
@@ -23,6 +24,37 @@ export class CanvasManager {
   private filterState: FilterState | null = null;
   private toolbarEl: HTMLElement | null = null;
   private selectedTaskNodeId: string | null = null;
+  /** Invoked whenever cached task data may have changed (add/remove/edit/save). */
+  onDataChanged: (() => void) | null = null;
+
+  private notifyDataChanged(): void {
+    try {
+      this.onDataChanged?.();
+    } catch (e: unknown) {
+      console.error('Canvas Task Cards: stats refresh error', e);
+    }
+  }
+
+  /**
+   * Computes the progress a card visually shows: explicit manual progress,
+   * then 100% when completed, then the live `- [x]` checkbox ratio from the
+   * node text, and finally 0. Used by the stats panel / status bar.
+   */
+  getEffectiveProgress(nodeId: string, data: TaskCardData): number {
+    if (data.progress >= 0) return data.progress;
+    if (data.completed) return 100;
+    const node = this.getNodeFromCanvas(this.activeCanvas, nodeId);
+    if (node) {
+      const raw = node.getData?.();
+      const rawText = raw && typeof raw === 'object'
+        ? (raw as Record<string, unknown>).text as string
+        : undefined;
+      const text = rawText ?? node.text ?? '';
+      const cp = this.renderer.calcCheckboxProgressFromText(text);
+      if (cp >= 0) return cp;
+    }
+    return 0;
+  }
 
   private get doc(): Document {
     return activeDocument ?? document;
@@ -131,6 +163,7 @@ export class CanvasManager {
       this.setupContextMenu();
       this.setupPopupMenu();
       this.setupToolbar();
+      this.notifyDataChanged();
     } catch (e: unknown) {
       console.error('Canvas Task Cards: setupCanvas error', e);
     }
@@ -145,6 +178,7 @@ export class CanvasManager {
     this.runCleanup();
     this.activeCanvas = null;
     this.currentCanvasPath = '';
+    this.notifyDataChanged();
   }
 
   private processExistingNodes(): void {
@@ -173,11 +207,13 @@ export class CanvasManager {
       this.patchNodeSetData(node);
       this.checkAndRender(node);
       if (this.filterState) this.applyFilterToNode(node);
+      this.notifyDataChanged();
     };
     const onNodeRemoved = (node: ExtendedCanvasNode) => {
       const nodeEl = this.getNodeEl(node);
       if (nodeEl) this.renderer.remove(nodeEl);
       if (node?.id) this.plugin.storage.remove(this.currentCanvasPath, node.id);
+      this.notifyDataChanged();
     };
 
     try {
@@ -233,6 +269,7 @@ export class CanvasManager {
       // is written with the latest state.
       self.persistTaskDataToNodes();
       const result = orig(...args);
+      self.notifyDataChanged();
       return result;
     };
     this.cleanupFns.push(() => {

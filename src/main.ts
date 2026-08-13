@@ -1,15 +1,18 @@
-import { Plugin, Notice, activeDocument } from 'obsidian';
+import { Plugin, Notice, activeDocument, setTooltip } from 'obsidian';
 import { DEFAULT_SETTINGS, type PluginSettings, type PersistedPluginData, type FilterState } from './types';
 import { SettingsTab } from './settings';
 import { TaskStorage } from './storage';
 import { CanvasManager } from './canvasManager';
 import { registerCommands } from './commands';
+import { calculateStats } from './stats';
+import { TaskStatsModal } from './statsModal';
 
 export default class CanvasTaskCardsPlugin extends Plugin {
   settings: PluginSettings = { ...DEFAULT_SETTINGS };
   storage: TaskStorage;
   canvasManager: CanvasManager;
   savedFilter: FilterState | null = null;
+  private statusBarEl: HTMLElement | null = null;
 
   async onload(): Promise<void> {
     this.storage = new TaskStorage(this);
@@ -23,12 +26,15 @@ export default class CanvasTaskCardsPlugin extends Plugin {
     registerCommands(this);
 
     this.canvasManager.initialize();
+    this.setupStatusBarStats();
 
     new Notice('Canvas Task Cards loaded');
   }
 
   onunload(): void {
     this.canvasManager?.destroy();
+    this.canvasManager.onDataChanged = null;
+    this.statusBarEl = null;
   }
 
   async loadPluginData(): Promise<void> {
@@ -85,5 +91,73 @@ export default class CanvasTaskCardsPlugin extends Plugin {
     } else {
       root.classList.remove('task-card-animations');
     }
+  }
+
+  private setupStatusBarStats(): void {
+    this.canvasManager.onDataChanged = () => this.refreshStatusBar();
+    this.applyStatusBarToggle(this.settings.showStatusBarStats);
+    this.registerInterval(window.setInterval(() => this.refreshStatusBar(), 2000));
+    this.refreshStatusBar();
+  }
+
+  applyStatusBarToggle(enabled: boolean): void {
+    if (enabled && !this.statusBarEl) {
+      this.statusBarEl = this.addStatusBarItem();
+      this.statusBarEl.addClass('task-card-status-bar');
+      this.statusBarEl.addEventListener('click', () => this.openStatsModal());
+      this.refreshStatusBar();
+    } else if (!enabled && this.statusBarEl) {
+      this.statusBarEl.remove();
+      this.statusBarEl = null;
+    }
+  }
+
+  private refreshStatusBar(): void {
+    const el = this.statusBarEl;
+    if (!el) return;
+
+    const cm = this.canvasManager;
+    if (!cm?.activeCanvas || !cm.currentCanvasPath) {
+      el.hide();
+      return;
+    }
+
+    const stats = calculateStats(
+      this.storage.getAll(cm.currentCanvasPath),
+      (id, data) => cm.getEffectiveProgress(id, data),
+    );
+    if (stats.total === 0) {
+      el.hide();
+      return;
+    }
+
+    el.show();
+    el.empty();
+
+    const pill = el.createDiv({ cls: 'task-status-pill' });
+    const track = pill.createDiv({ cls: 'task-status-mini-track' });
+    const fill = track.createDiv({ cls: 'task-status-mini-fill' });
+    fill.style.width = `${stats.completionRate}%`;
+    if (stats.completionRate === 100) fill.style.background = this.settings.completedBorderColor;
+    else fill.style.background = this.settings.progressBarColor;
+
+    pill.createDiv({ cls: 'task-status-label' }).textContent =
+      `${stats.completed}/${stats.total} · ${stats.completionRate}%`;
+
+    setTooltip(
+      el,
+      `Task Cards: ${stats.completed}/${stats.total} done (${stats.completionRate}%)\n` +
+      `${stats.totalSubtasks} subtasks (${stats.completedSubtasks} done)\n` +
+      `Avg progress: ${stats.avgProgress}% — click for details`,
+      { placement: 'top' },
+    );
+  }
+
+  openStatsModal(): void {
+    if (!this.canvasManager?.activeCanvas) {
+      new Notice('Open a canvas to view task stats');
+      return;
+    }
+    new TaskStatsModal(this).open();
   }
 }

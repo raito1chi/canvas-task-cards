@@ -73,6 +73,16 @@ export function registerCommands(plugin: CanvasTaskCardsPlugin): void {
   });
 
   plugin.addCommand({
+    id: 'show-task-stats',
+    name: 'Show task card stats',
+    checkCallback: (checking: boolean) => {
+      if (!plugin.canvasManager?.activeCanvas) return false;
+      if (checking) return true;
+      plugin.openStatsModal();
+    },
+  });
+
+  plugin.addCommand({
     id: 'edit-subtasks',
     name: 'Edit subtasks',
     callback: () => {

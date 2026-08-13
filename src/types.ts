@@ -33,6 +33,7 @@ export interface PluginSettings {
   progressBarHeight: number;
   progressBarColor: string;
   progressBarAutoColor: boolean;
+  showStatusBarStats: boolean;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -52,6 +53,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   progressBarHeight: 4,
   progressBarColor: '#4caf50',
   progressBarAutoColor: true,
+  showStatusBarStats: true,
 };
 
 export interface FilterState {

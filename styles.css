@@ -248,7 +248,10 @@
   .task-priority-dot,
   .task-progress-fill,
   .task-toolbar button,
-  .canvas-node.is-completed.canvas-node .canvas-node-container {
+  .canvas-node.is-completed.canvas-node .canvas-node-container,
+  .task-status-mini-fill,
+  .task-stats-bar-fill,
+  .task-card-status-bar {
     transition: none;
   }
 
@@ -624,3 +627,205 @@
 
 
 
+
+/* ── Stats status bar ── */
+
+.task-card-status-bar {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 5px;
+  transition: background-color 0.15s ease;
+}
+
+.task-card-status-bar:hover {
+  background: var(--background-modifier-hover);
+}
+
+.task-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--background-modifier-hover);
+}
+
+.task-status-mini-track {
+  width: 34px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+  flex: none;
+}
+
+.task-status-mini-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--interactive-accent);
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.task-status-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ── Stats modal ── */
+
+.task-stats-modal {
+  min-width: 340px;
+  max-width: 440px;
+}
+
+.task-stats-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 14px;
+}
+
+.task-stats-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.task-stats-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.task-stats-empty {
+  color: var(--text-muted);
+  padding: 18px 0;
+  text-align: center;
+}
+
+.task-stats-summary {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+}
+
+.task-stats-ring {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--task-ring-color, var(--interactive-accent)) var(--task-ring-progress, 0deg),
+    var(--background-modifier-border) 0deg
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.task-stats-ring::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--background-primary);
+}
+
+.task-stats-ring-value {
+  position: relative;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.task-stats-summary-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-stats-summary-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.task-stats-summary-big {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.task-stats-summary-sep {
+  color: var(--text-muted);
+}
+
+.task-stats-summary-suffix {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.task-stats-summary-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.task-stats-section {
+  margin-top: 16px;
+}
+
+.task-stats-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.task-stats-muted {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.task-stats-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.task-stats-bar-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+}
+
+.task-stats-bar-label {
+  color: var(--text-normal);
+}
+
+.task-stats-bar-value {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.task-stats-bar-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+
+.task-stats-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
