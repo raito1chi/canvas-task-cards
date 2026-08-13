@@ -162,7 +162,7 @@ export class TaskStatsModal extends Modal {
         fill.style.width = `${Math.max(2, bucket.percent)}%`;
         fill.style.background = color;
       } else {
-        fill.style.width = '0%';
+        fill.setCssProps({ width: '0%' });
       }
     }
   }
@@ -178,7 +178,7 @@ export class TaskStatsModal extends Modal {
     const track = row.createDiv({ cls: 'task-stats-bar-track' });
     const fill = track.createDiv({ cls: 'task-stats-bar-fill' });
     fill.style.width = `${Math.max(stats.avgProgress > 0 ? 2 : 0, stats.avgProgress)}%`;
-    fill.style.background = 'var(--interactive-accent)';
+    fill.setCssProps({ background: 'var(--interactive-accent)' });
   }
 
   private renderSubtasks(contentEl: HTMLElement, stats: TaskStats): void {

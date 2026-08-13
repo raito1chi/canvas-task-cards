@@ -47,7 +47,7 @@ export class CanvasManager {
     if (node) {
       const raw = node.getData?.();
       const rawText = raw && typeof raw === 'object'
-        ? (raw as Record<string, unknown>).text as string
+        ? raw.text as string
         : undefined;
       const text = rawText ?? node.text ?? '';
       const cp = this.renderer.calcCheckboxProgressFromText(text);
@@ -91,7 +91,7 @@ export class CanvasManager {
 
   private handleActiveLeaf(): void {
     try {
-      const activeLeaf = this.plugin.app.workspace.activeLeaf;
+      const activeLeaf = this.plugin.app.workspace.getMostRecentLeaf();
       if (!activeLeaf?.view) {
         this.scheduleRetry();
         return;
@@ -259,21 +259,20 @@ export class CanvasManager {
   private setupSaveHook(): void {
     const canvas = this.activeCanvas;
     if (!canvas || typeof canvas.requestSave !== 'function') return;
-    const orig = canvas.requestSave.bind(canvas);
-    const self = this;
-    canvas.requestSave = function(...args: unknown[]) {
-      self.persistTaskDataToNodes();
-      self.pruneCacheRemovedNodes();
-      self.syncAllTaskCards();
+    const origSave = canvas.requestSave.bind(canvas) as (...args: unknown[]) => void;
+    canvas.requestSave = (...args: unknown[]) => {
+      this.persistTaskDataToNodes();
+      this.pruneCacheRemovedNodes();
+      this.syncAllTaskCards();
       // Text-sync may have updated completion; re-inject so the file
       // is written with the latest state.
-      self.persistTaskDataToNodes();
-      const result = orig(...args);
-      self.notifyDataChanged();
+      this.persistTaskDataToNodes();
+      const result = origSave(...args);
+      this.notifyDataChanged();
       return result;
     };
     this.cleanupFns.push(() => {
-      canvas.requestSave = orig;
+      canvas.requestSave = origSave;
     });
   }
 
@@ -293,7 +292,7 @@ export class CanvasManager {
       try {
         const d = node.getData?.();
         if (!d || typeof d !== 'object') continue;
-        const rec = d as Record<string, unknown>;
+        const rec = d;
         if (cache?.taskCard) {
           if (JSON.stringify(rec[TASK_CARD_DATA_KEY]) !== JSON.stringify(cache)) {
             node.setData({ ...rec });
@@ -318,21 +317,22 @@ export class CanvasManager {
 
     const path = this.currentCanvasPath;
     const id = node.id;
-    const origSetData = node.setData.bind(node);
-    const self = this;
+    const origSetData = node.setData.bind(node) as ExtendedCanvasNode['setData'];
 
-    node.setData = ((data: Record<string, unknown>) => {
-      const cache = self.plugin.storage.get(path, id);
+    node.setData = (data: Record<string, unknown>) => {
+      const cache = this.plugin.storage.get(path, id);
       if (cache?.taskCard) {
-        return origSetData({ ...data, [TASK_CARD_DATA_KEY]: cache });
+        origSetData({ ...data, [TASK_CARD_DATA_KEY]: cache });
+        return;
       }
       if (data && data[TASK_CARD_DATA_KEY] !== undefined) {
         const stripped = { ...data };
         delete stripped[TASK_CARD_DATA_KEY];
-        return origSetData(stripped);
+        origSetData(stripped);
+        return;
       }
-      return origSetData(data);
-    }) as ExtendedCanvasNode['setData'];
+      origSetData(data);
+    };
   }
 
   private patchAllNodesSetData(): void {
@@ -347,7 +347,7 @@ export class CanvasManager {
     const canvas = this.activeCanvas;
     if (!canvas?.nodes) return;
     const ids = new Set(
-      this.getNodeEntries().filter(n => n && n.id).map(n => n.id as string),
+      this.getNodeEntries().filter(n => n && n.id).map(n => n.id),
     );
     const cached = this.plugin.storage.getAll(this.currentCanvasPath);
     for (const id of Object.keys(cached)) {
@@ -365,7 +365,7 @@ export class CanvasManager {
   private migrateLegacyForPath(path: string): void {
     if (!this.plugin.storage.hasLegacy(path)) return;
     const nodeIds = new Set(
-      this.getNodeEntries().filter(n => n && n.id).map(n => n.id as string),
+      this.getNodeEntries().filter(n => n && n.id).map(n => n.id),
     );
     let migrated = 0;
     for (const id of this.plugin.storage.getLegacyIds(path)) {
@@ -406,7 +406,7 @@ export class CanvasManager {
       if (!node?.id) continue;
       const cardData = this.ensureTaskData(node);
       if (!cardData?.taskCard || cardData.progress >= 0) continue;
-      const text = node.text || (node.getData ? (node.getData() as Record<string, unknown>).text as string : '') || '';
+      const text = node.text || (node.getData ? node.getData().text as string : '') || '';
       const cp = this.renderer.calcCheckboxProgressFromText(text);
       if (cp < 0) continue;
       const nodeEl = this.getNodeEl(node);
@@ -545,9 +545,9 @@ export class CanvasManager {
       proto.__ctcMenuPatched = true;
 
       const origShowAtMouseEvent = proto.showAtMouseEvent;
-      const self = this;
+      const addNewTask = (): void => this.addNewTaskCard();
 
-      proto.showAtMouseEvent = function (this: Menu, evt: MouseEvent) {
+      proto.showAtMouseEvent = function (this: Menu, evt: MouseEvent): Menu {
         try {
           const target = evt?.target as Element | null;
           if (target && target.classList.contains('canvas-wrapper')) {
@@ -556,14 +556,14 @@ export class CanvasManager {
                 .setSection('create')
                 .setTitle('Add Task Card')
                 .setIcon('list-todo')
-                .onClick(() => self.addNewTaskCard());
+                .onClick(addNewTask);
               (item as unknown as { dom?: HTMLElement }).dom?.addClass?.('task-card-add-item');
             });
           }
         } catch (e: unknown) {
           console.error('Canvas Task Cards: empty-space menu injection error', e);
         }
-        return origShowAtMouseEvent.call(this, evt);
+        return Reflect.apply(origShowAtMouseEvent, this, [evt]);
       };
 
       this.cleanupFns.push(() => {
@@ -625,10 +625,10 @@ export class CanvasManager {
 
     const menu = canvas.menu;
     if (!menu) return;
-    const origRender = menu.render.bind(menu);
+    const origRender = menu.render.bind(menu) as (...args: unknown[]) => void;
 
     menu.render = (...args: unknown[]) => {
-      origRender.call(menu, ...args);
+      origRender(...args);
       try { this.injectIntoPopupMenu(menu); }
       catch (e: unknown) { console.error('Canvas Task Cards: popup inject error', e); }
     };
@@ -1442,7 +1442,7 @@ export class CanvasManager {
   parseSubtasksFromCardText(nodeId: string): Array<{ text: string; completed: boolean }> {
     const node = this.resolveNode(nodeId);
     if (!node) return [];
-    const text = node.text || (node.getData ? (node.getData() as Record<string, unknown>).text as string : '') || '';
+    const text = node.text || (node.getData ? node.getData().text as string : '') || '';
     const results: Array<{ text: string; completed: boolean }> = [];
     const regex = /^\s*- \[([ xX])\]\s+(.+)$/gm;
     let match;

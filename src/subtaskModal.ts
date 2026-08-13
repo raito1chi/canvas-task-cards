@@ -1,6 +1,6 @@
 import { Modal, Notice } from 'obsidian';
 import type CanvasTaskCardsPlugin from './main';
-import type { TaskCardData, Subtask } from './types';
+import type { TaskCardData } from './types';
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
