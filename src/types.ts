@@ -54,9 +54,15 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   progressBarAutoColor: true,
 };
 
+export interface FilterState {
+  cardType?: CardType;
+  priority?: Priority;
+}
+
 export interface PersistedPluginData {
   settings?: Partial<PluginSettings>;
   taskData?: Record<string, Record<string, TaskCardData>>;
+  filter?: FilterState | null;
 }
 
 // ── Canvas API types ──

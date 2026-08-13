@@ -13,6 +13,7 @@ An Obsidian plugin that turns Canvas cards into task cards with completion state
   - `ℹ` **Info** (cyan)
 - **Priority levels** — set priority with a colored dot on the indicator (High, Medium, Low, None)
 - **Completion toggle** — click the indicator to mark a card as completed/incomplete (state persists across restarts)
+- **Data resilience** — task state is embedded inside the `.canvas` file itself, so renames/moves never lose task data; old plugin-data entries are migrated automatically
 - **Visual feedback** — completed cards get a colored border and reduced opacity; types have distinct accent colors
 - **Floating popup toolbar** — when you click a task card, type and priority controls appear in the card appearance area (alongside Obsidian's color picker and Advanced Canvas shape controls)
 - **Right-click context menu** — "Mark Completed/Mark Todo", "Convert to Normal Card"

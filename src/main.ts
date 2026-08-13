@@ -1,5 +1,5 @@
 import { Plugin, Notice, activeDocument } from 'obsidian';
-import { DEFAULT_SETTINGS, type PluginSettings, type PersistedPluginData } from './types';
+import { DEFAULT_SETTINGS, type PluginSettings, type PersistedPluginData, type FilterState } from './types';
 import { SettingsTab } from './settings';
 import { TaskStorage } from './storage';
 import { CanvasManager } from './canvasManager';
@@ -9,6 +9,7 @@ export default class CanvasTaskCardsPlugin extends Plugin {
   settings: PluginSettings = { ...DEFAULT_SETTINGS };
   storage: TaskStorage;
   canvasManager: CanvasManager;
+  savedFilter: FilterState | null = null;
 
   async onload(): Promise<void> {
     this.storage = new TaskStorage(this);
@@ -34,7 +35,14 @@ export default class CanvasTaskCardsPlugin extends Plugin {
     try {
       const data = (await this.loadData()) as PersistedPluginData | null;
       this.settings = Object.assign({}, DEFAULT_SETTINGS, data?.settings ?? {});
-      this.storage.load(data?.taskData ?? {});
+      this.storage.loadLegacy(data?.taskData ?? {});
+      this.savedFilter = data?.filter ?? null;
+
+      // Drop legacy entries whose canvas files were moved/renamed/deleted.
+      const cleaned = this.storage.pruneOrphanLegacy(
+        (path: string) => !!this.app.vault.getAbstractFileByPath(path),
+      );
+      if (cleaned > 0) await this.saveSettings();
     } catch (e: unknown) {
       console.error('Canvas Task Cards: Error loading data', e);
       this.settings = { ...DEFAULT_SETTINGS };
@@ -46,6 +54,7 @@ export default class CanvasTaskCardsPlugin extends Plugin {
       await this.saveData({
         settings: this.settings,
         taskData: this.storage.export(),
+        filter: this.savedFilter ?? null,
       } satisfies PersistedPluginData);
     } catch (e: unknown) {
       console.error('Canvas Task Cards: Error saving data', e);

@@ -5,8 +5,10 @@ import type {
   Priority,
   ExtendedCanvas,
   ExtendedCanvasNode,
+  FilterState,
 } from './types';
 import { TaskRenderer } from './renderer';
+import { TASK_CARD_DATA_KEY } from './storage';
 
 export class CanvasManager {
   plugin: CanvasTaskCardsPlugin;
@@ -18,7 +20,7 @@ export class CanvasManager {
   private canvasRetryCount: number = 0;
   private canvasRetryTimeout: number | null = null;
   private lastContextMenuEvent: MouseEvent | null = null;
-  private filterState: { cardType?: CardType; priority?: Priority } | null = null;
+  private filterState: FilterState | null = null;
   private toolbarEl: HTMLElement | null = null;
   private selectedTaskNodeId: string | null = null;
 
@@ -118,10 +120,13 @@ export class CanvasManager {
     this.currentCanvasPath = path;
 
     try {
+      this.setupSaveHook();
+      this.migrateLegacyForPath(path);
+      this.filterState = this.plugin.savedFilter ?? null;
       this.processExistingNodes();
+      this.applyFilterToAll();
       this.attachCanvasEvents();
       this.attachMutationObserver();
-      this.setupSaveHook();
       this.setupContextMenu();
       this.setupPopupMenu();
       this.setupToolbar();
@@ -165,10 +170,12 @@ export class CanvasManager {
 
     const onNodeAdded = (node: ExtendedCanvasNode) => {
       this.checkAndRender(node);
+      if (this.filterState) this.applyFilterToNode(node);
     };
     const onNodeRemoved = (node: ExtendedCanvasNode) => {
       const nodeEl = this.getNodeEl(node);
       if (nodeEl) this.renderer.remove(nodeEl);
+      if (node?.id) this.plugin.storage.remove(this.currentCanvasPath, node.id);
     };
 
     try {
@@ -217,8 +224,13 @@ export class CanvasManager {
     const orig = canvas.requestSave.bind(canvas);
     const self = this;
     canvas.requestSave = function(...args: unknown[]) {
-      const result = orig(...args);
+      self.persistTaskDataToNodes();
+      self.pruneCacheRemovedNodes();
       self.syncAllTaskCards();
+      // Text-sync may have updated completion; re-inject so the file
+      // is written with the latest state.
+      self.persistTaskDataToNodes();
+      const result = orig(...args);
       return result;
     };
     this.cleanupFns.push(() => {
@@ -226,13 +238,89 @@ export class CanvasManager {
     });
   }
 
+  /**
+   * Writes/removes the embedded task-card field on each node's live data
+   * object so the next save serializes it into the `.canvas` file.
+   */
+  private persistTaskDataToNodes(): void {
+    const canvas = this.activeCanvas;
+    if (!canvas?.nodes) return;
+    for (const node of this.getNodeEntries()) {
+      if (!node?.id) continue;
+      try {
+        const d = node.getData?.();
+        if (!d || typeof d !== 'object') continue;
+        if (this.plugin.storage.has(this.currentCanvasPath, node.id)) {
+          (d as Record<string, unknown>)[TASK_CARD_DATA_KEY] =
+            this.plugin.storage.get(this.currentCanvasPath, node.id);
+        }
+      } catch { /* noop */ }
+    }
+  }
+
+  /** Drops cached data for nodes that no longer exist on the canvas. */
+  private pruneCacheRemovedNodes(): void {
+    const canvas = this.activeCanvas;
+    if (!canvas?.nodes) return;
+    const ids = new Set(
+      this.getNodeEntries().filter(n => n && n.id).map(n => n.id as string),
+    );
+    const cached = this.plugin.storage.getAll(this.currentCanvasPath);
+    for (const id of Object.keys(cached)) {
+      if (!ids.has(id)) {
+        this.plugin.storage.remove(this.currentCanvasPath, id);
+      }
+    }
+  }
+
+  /**
+   * One-time migration from the old plugin-data store into the embedded
+   * canvas-file fields. Orphaned legacy entries (deleted/renamed nodes) are
+   * dropped here as well.
+   */
+  private migrateLegacyForPath(path: string): void {
+    if (!this.plugin.storage.hasLegacy(path)) return;
+    const nodeIds = new Set(
+      this.getNodeEntries().filter(n => n && n.id).map(n => n.id as string),
+    );
+    let migrated = 0;
+    for (const id of this.plugin.storage.getLegacyIds(path)) {
+      const legacy = this.plugin.storage.getLegacy(path, id);
+      if (!legacy) {
+        this.plugin.storage.removeLegacy(path, id);
+        migrated++;
+        continue;
+      }
+      if (nodeIds.has(id)) {
+        if (!this.plugin.storage.has(path, id)) {
+          this.plugin.storage.set(path, id, legacy);
+        }
+        migrated++;
+      } else {
+        // Node was deleted; drop the dangling record.
+        migrated++;
+      }
+      this.plugin.storage.removeLegacy(path, id);
+    }
+    this.plugin.storage.cleanupLegacyPath(path);
+    if (migrated > 0) {
+      void this.plugin.saveSettings();
+      this.flushTaskData();
+    }
+  }
+
+  /** Forces a canvas save so embedded task data is written to the file. */
+  private flushTaskData(): void {
+    this.activeCanvas?.requestSave?.();
+  }
+
   private syncAllTaskCards(): void {
     const canvas = this.activeCanvas;
     if (!canvas?.nodes) return;
     const entries = this.getNodeEntries();
     for (const node of entries) {
-      if (!node.id || !this.plugin.storage.has(this.currentCanvasPath, node.id)) continue;
-      const cardData = this.plugin.storage.get(this.currentCanvasPath, node.id);
+      if (!node?.id) continue;
+      const cardData = this.ensureTaskData(node);
       if (!cardData?.taskCard || cardData.progress >= 0) continue;
       const text = node.text || (node.getData ? (node.getData() as Record<string, unknown>).text as string : '') || '';
       const cp = this.renderer.calcCheckboxProgressFromText(text);
@@ -902,6 +990,7 @@ export class CanvasManager {
       subtasks: [],
     });
     void this.plugin.saveSettings();
+    this.flushTaskData();
 
     const renderCheck = (retries: number) => {
       const n = this.getNodeFromCanvas(canvas, nodeId);
@@ -996,6 +1085,26 @@ export class CanvasManager {
     return null;
   }
 
+  /**
+   * Returns task data for a node, loading it from the embedded canvas-file
+   * field when the cache doesn't have it yet.
+   */
+  private ensureTaskData(node: ExtendedCanvasNode): import('./types').TaskCardData | undefined {
+    if (!node?.id) return undefined;
+    if (this.plugin.storage.has(this.currentCanvasPath, node.id)) {
+      return this.plugin.storage.get(this.currentCanvasPath, node.id);
+    }
+    try {
+      const d = node.getData?.() as Record<string, unknown> | undefined;
+      const embedded = this.plugin.storage.readEmbedded(d);
+      if (embedded?.taskCard) {
+        this.plugin.storage.set(this.currentCanvasPath, node.id, embedded);
+        return embedded;
+      }
+    } catch { /* noop */ }
+    return undefined;
+  }
+
   private renderNodeOnElement(nodeEl: HTMLElement, node: ExtendedCanvasNode): void {
     if (!node || !node.id) return;
     let nodeType = node.type;
@@ -1005,7 +1114,7 @@ export class CanvasManager {
     if (!nodeType && node.text !== undefined) nodeType = 'text' as const;
     if (!nodeType && node.file) nodeType = 'file' as const;
     if (nodeType !== 'text' && nodeType !== 'file') return;
-    const data = this.plugin.storage.get(this.currentCanvasPath, node.id);
+    const data = this.ensureTaskData(node);
     if (!data?.taskCard) return;
     this.renderer.render(nodeEl, node.id, data);
   }
@@ -1016,7 +1125,7 @@ export class CanvasManager {
     if (!nodeEl) return;
     const nodeType = node.type || (node.getData?.()?.type as string);
     if (nodeType !== 'text' && nodeType !== 'file') return;
-    const data = this.plugin.storage.get(this.currentCanvasPath, node.id);
+    const data = this.ensureTaskData(node);
     if (!data?.taskCard) return;
     this.renderer.render(nodeEl, node.id, data);
   }
@@ -1057,6 +1166,7 @@ export class CanvasManager {
     this.setAllCardCheckboxes(nodeId, data.completed);
     await this.plugin.saveSettings();
     this.renderer.update(nodeEl, data);
+    this.flushTaskData();
   }
 
   private setAllCardCheckboxes(nodeId: string, checked: boolean): void {
@@ -1094,6 +1204,7 @@ export class CanvasManager {
     this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
     await this.plugin.saveSettings();
     this.renderer.render(nodeEl, nodeId, data);
+    this.flushTaskData();
   }
 
   async convertToNormal(nodeId: string): Promise<void> {
@@ -1105,6 +1216,14 @@ export class CanvasManager {
     this.plugin.storage.remove(this.currentCanvasPath, nodeId);
     await this.plugin.saveSettings();
     this.renderer.remove(nodeEl);
+    // Strip the embedded field so it doesn't persist in the canvas file.
+    try {
+      const d = node.getData?.() as Record<string, unknown> | undefined;
+      if (d && d[TASK_CARD_DATA_KEY] !== undefined) {
+        delete d[TASK_CARD_DATA_KEY];
+      }
+    } catch { /* noop */ }
+    this.flushTaskData();
   }
 
   async toggleTask(nodeId: string): Promise<void> {
@@ -1137,6 +1256,7 @@ export class CanvasManager {
       await this.plugin.saveSettings();
       this.renderer.update(nodeEl, data);
     }
+    this.flushTaskData();
   }
 
   async markCompleted(nodeId: string): Promise<void> {
@@ -1157,6 +1277,7 @@ export class CanvasManager {
     this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
     await this.plugin.saveSettings();
     this.renderer.render(nodeEl, nodeId, data);
+    this.flushTaskData();
   }
 
   async markTodo(nodeId: string): Promise<void> {
@@ -1177,6 +1298,7 @@ export class CanvasManager {
     this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
     await this.plugin.saveSettings();
     this.renderer.render(nodeEl, nodeId, data);
+    this.flushTaskData();
   }
 
   async openSubtaskModal(nodeId: string): Promise<void> {
@@ -1298,6 +1420,7 @@ export class CanvasManager {
     this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
     await this.plugin.saveSettings();
     this.renderer.update(nodeEl, data);
+    this.flushTaskData();
   }
 
   async setPriority(nodeId: string, priority: Priority): Promise<void> {
@@ -1311,10 +1434,13 @@ export class CanvasManager {
     this.plugin.storage.set(this.currentCanvasPath, nodeId, data);
     await this.plugin.saveSettings();
     this.renderer.update(nodeEl, data);
+    this.flushTaskData();
   }
 
-  setFilter(filter: { cardType?: CardType; priority?: Priority } | null): void {
+  setFilter(filter: FilterState | null): void {
     this.filterState = filter;
+    this.plugin.savedFilter = filter;
+    void this.plugin.saveSettings();
     this.applyFilterToAll();
     if (filter) {
       const parts: string[] = [];
@@ -1326,8 +1452,22 @@ export class CanvasManager {
     }
   }
 
-  getFilterState(): { cardType?: CardType; priority?: Priority } | null {
+  getFilterState(): FilterState | null {
     return this.filterState;
+  }
+
+  private applyFilterToNode(node: ExtendedCanvasNode): void {
+    if (!this.filterState) return;
+    const nodeEl = this.getNodeEl(node);
+    if (!nodeEl) return;
+    const data = this.ensureTaskData(node);
+    if (!data?.taskCard) {
+      nodeEl.classList.add('filtered-out');
+      return;
+    }
+    const matchType = !this.filterState.cardType || data.cardType === this.filterState.cardType;
+    const matchPriority = !this.filterState.priority || data.priority === this.filterState.priority;
+    nodeEl.classList.toggle('filtered-out', !matchType || !matchPriority);
   }
 
   private applyFilterToAll(): void {
@@ -1335,6 +1475,7 @@ export class CanvasManager {
     if (!canvas?.nodes) return;
     const entries = this.getNodeEntries();
     for (const node of entries) {
+      if (!node?.id) continue;
       const nodeEl = this.getNodeEl(node);
       if (!nodeEl) continue;
       if (!this.filterState) {
