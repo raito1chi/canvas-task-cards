@@ -1,4 +1,4 @@
-import { Notice, activeDocument, setIcon, setTooltip } from 'obsidian';
+import { Menu, Notice, activeDocument, setIcon, setTooltip } from 'obsidian';
 import type CanvasTaskCardsPlugin from './main';
 import type {
   CardType,
@@ -439,10 +439,7 @@ export class CanvasManager {
     this.tryWorkspaceContextMenu();
 
     // Method 2: Native "Add Task Card" in the empty-space menu
-    this.tryEmptySpaceMenu();
-
-    // Method 3: DOM fallback (older Obsidian without the canvas:menu event)
-    this.setupEmptySpaceMenu();
+    this.patchEmptySpaceMenu();
   }
 
   private trackRightClickPosition(): void {
@@ -490,34 +487,54 @@ export class CanvasManager {
   }
 
   /**
-   * Adds a native "Add Task Card" entry to Obsidian's empty-space context
-   * menu via the `canvas:menu` workspace event (fires with `empty = true`).
-   * Native menu items render identically to Obsidian's own entries.
+   * Adds a native "Add Task Card" entry to Obsidian's empty-space canvas
+   * context menu.
+   *
+   * Obsidian builds that menu with a plain `Menu` and opens it via
+   * `Menu.prototype.showAtMouseEvent` without firing any workspace event
+   * (the canvas only emits `canvas:node-menu`, `canvas:edge-menu` and
+   * `canvas:selection-menu`). We therefore wrap `showAtMouseEvent` and, when
+   * the clicked target is the `.canvas-wrapper` element itself (Obsidian's
+   * own empty-space guard is `event.targetNode === wrapperEl`), append a
+   * native item with the "create" section so it groups with Obsidian's
+   * own "Add card / Add note / ..." actions.
    */
-  private tryEmptySpaceMenu(): void {
+  private patchEmptySpaceMenu(): void {
     try {
-      const eventName = 'canvas:menu';
-      const handler = (menu: {
-        addItem: (cb: (item: { setTitle: (t: string) => void; setIcon: (i: string) => void; onClick: (fn: () => void) => void }) => void) => void;
-      }, _canvas: unknown, empty: boolean) => {
+      const proto = Menu.prototype as unknown as {
+        showAtMouseEvent: (evt: MouseEvent) => Menu;
+      } & Record<string, unknown>;
+      if (proto.__ctcMenuPatched) return;
+      proto.__ctcMenuPatched = true;
+
+      const origShowAtMouseEvent = proto.showAtMouseEvent;
+      const self = this;
+
+      proto.showAtMouseEvent = function (this: Menu, evt: MouseEvent) {
         try {
-          if (!empty) return;
-          menu.addItem((item) => {
-            item.setTitle('Add Task Card');
-            item.setIcon('list-todo');
-            item.onClick(() => this.addNewTaskCard());
-          });
+          const target = evt?.target as Element | null;
+          if (target && target.classList.contains('canvas-wrapper')) {
+            this.addItem((item) => {
+              item
+                .setSection('create')
+                .setTitle('Add Task Card')
+                .setIcon('list-todo')
+                .onClick(() => self.addNewTaskCard());
+              (item as unknown as { dom?: HTMLElement }).dom?.addClass?.('task-card-add-item');
+            });
+          }
         } catch (e: unknown) {
-          console.error('Canvas Task Cards: canvas:menu handler error', e);
+          console.error('Canvas Task Cards: empty-space menu injection error', e);
         }
+        return origShowAtMouseEvent.call(this, evt);
       };
-      const ws = this.plugin.app.workspace;
-      (ws as unknown as Record<string, (...args: unknown[]) => void>).on(eventName, handler);
+
       this.cleanupFns.push(() => {
-        try { (ws as unknown as Record<string, (...args: unknown[]) => void>).off?.(eventName, handler); } catch { /* noop */ }
+        proto.showAtMouseEvent = origShowAtMouseEvent;
+        delete proto.__ctcMenuPatched;
       });
     } catch (e: unknown) {
-      console.error('Canvas Task Cards: Error registering canvas:menu event', e);
+      console.error('Canvas Task Cards: Error patching empty-space menu', e);
     }
   }
 
@@ -561,59 +578,6 @@ export class CanvasManager {
         item.onClick(() => void this.convertToTask(node.id));
       });
     }
-  }
-
-  // ── Empty-space "Add Task Card" (injects into Obsidian's menu) ──
-
-  private setupEmptySpaceMenu(): void {
-    const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const nodeEl = target.closest<HTMLElement>('.canvas-node');
-      if (nodeEl) return;
-
-      window.setTimeout(() => {
-        this.injectAddTaskCardIntoEmptyMenu();
-      }, 200);
-    };
-
-    this.doc.addEventListener('contextmenu', handler, true);
-    this.cleanupFns.push(() => {
-      this.doc.removeEventListener('contextmenu', handler, true);
-    });
-  }
-
-  private injectAddTaskCardIntoEmptyMenu(): void {
-    const menus = this.doc.body.querySelectorAll('.menu');
-    if (menus.length === 0) return;
-
-    for (let mi = 0; mi < menus.length; mi++) {
-      if (menus[mi].querySelector('.task-card-add-item')) return;
-      // Skip if the native canvas:menu handler already added the entry.
-      if (menus[mi].querySelector('.menu-item-title')?.textContent === 'Add Task Card') return;
-    }
-
-    const menuEl = menus[menus.length - 1] as HTMLElement;
-
-    const sep = this.doc.createElement('div');
-    sep.className = 'menu-separator';
-    menuEl.appendChild(sep);
-
-    const item = this.doc.createElement('div');
-    item.className = 'menu-item task-card-add-item';
-    const iconSpan = this.doc.createElement('span');
-    iconSpan.className = 'menu-item-icon';
-    setIcon(iconSpan, 'list-todo');
-    item.appendChild(iconSpan);
-    const titleSpan = this.doc.createElement('span');
-    titleSpan.className = 'menu-item-title';
-    titleSpan.textContent = 'Add Task Card';
-    item.appendChild(titleSpan);
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.addNewTaskCard();
-      menuEl.remove();
-    });
-    menuEl.appendChild(item);
   }
 
   // ── Floating popup toolbar injection (card appearance area) ──
